@@ -25,6 +25,7 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var dropEvent: Bool = false
     @Published var anyDropZoneTargeting: Bool = false
     var cancellables: Set<AnyCancellable> = []
+    private var outsideClickMonitor: Any?
     
     @Published var hideOnClosed: Bool = true
 
@@ -48,6 +49,20 @@ class BoringViewModel: NSObject, ObservableObject {
     func destroy() {
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
+        updateOutsideClickMonitor(open: false)
+    }
+
+    // When the notch stays open after the mouse leaves, a click in another app closes it instead.
+    // Global monitors only see events sent to other apps, so clicks inside the notch don't count.
+    private func updateOutsideClickMonitor(open: Bool) {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+        guard open, Defaults[.keepNotchOpenOnHoverExit] else { return }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            DispatchQueue.main.async { self?.close() }
+        }
     }
 
     init(screenUUID: String? = nil) {
@@ -64,6 +79,11 @@ class BoringViewModel: NSObject, ObservableObject {
                 shelf || drag || general
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
+            .store(in: &cancellables)
+
+        $notchState
+            .removeDuplicates()
+            .sink { [weak self] state in self?.updateOutsideClickMonitor(open: state == .open) }
             .store(in: &cancellables)
 
         // Use the published values: $currentView fires on willSet, before the property changes.

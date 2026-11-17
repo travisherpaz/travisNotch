@@ -2503,6 +2503,7 @@
       }
     },
     "Always show tabs" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -15509,6 +15510,9 @@
           }
         }
       }
+    },
+    "Note %lld" : {
+
     },
     "Open Calendar Settings" : {
       "localizations" : {

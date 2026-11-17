@@ -324,6 +324,10 @@ struct GeneralSettings: View {
             Defaults.Toggle(key: .openNotchOnHover) {
                 Text("Open notch on hover")
             }
+            Defaults.Toggle(key: .keepNotchOpenOnHoverExit) {
+                Text("Keep notch open when mouse leaves")
+                Text("Click outside the notch to close it")
+            }
             Defaults.Toggle(key: .enableHaptics) {
                     Text("Enable haptic feedback")
             }
