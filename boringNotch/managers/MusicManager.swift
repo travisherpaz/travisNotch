@@ -55,6 +55,7 @@ class MusicManager: ObservableObject {
     @Published var isFavoriteTrack: Bool = false
 
     private var artworkData: Data? = nil
+    private var catalogArtworkCache: [String: NSImage] = [:]
 
     // Store last values at the time artwork was changed
     private var lastArtworkTitle: String = "I'm Handsome"
@@ -216,6 +217,7 @@ class MusicManager: ObservableObject {
                     self.usingAppIconForArtwork = true
                     self.updateAlbumArt(newAlbumArt: appIconImage)
                 }
+                self.fetchCatalogArtwork(title: state.title, artist: state.artist, album: state.album)
             }
             self.artworkData = state.artwork
 
@@ -522,6 +524,29 @@ class MusicManager: ObservableObject {
         DispatchQueue.main.async(execute: workItem)
     }
 
+    /// Music sometimes shows a cover but hands it out neither via AppleScript nor Now Playing.
+    /// Look the track up in the iTunes catalog instead (sends title/artist/album to Apple's search API).
+    private func fetchCatalogArtwork(title: String, artist: String, album: String) {
+        guard !title.isEmpty, title != "Not Playing", title != "Unknown" else { return }
+        let key = [title, artist, album].joined(separator: "\u{1}")
+        if let cached = catalogArtworkCache[key] {
+            usingAppIconForArtwork = false
+            updateAlbumArt(newAlbumArt: cached)
+            return
+        }
+        Task { [weak self] in
+            guard let image = await CatalogArtwork.lookup(title: title, artist: artist, album: album) else { return }
+            await MainActor.run {
+                guard let self else { return }
+                self.catalogArtworkCache[key] = image
+                // Still the same track, and the player hasn't since provided real artwork.
+                guard self.songTitle == title, self.artistName == artist, self.artworkData == nil else { return }
+                self.usingAppIconForArtwork = false
+                self.updateAlbumArt(newAlbumArt: image)
+            }
+        }
+    }
+
     private func updateArtwork(_ artworkData: Data) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -735,5 +760,59 @@ class MusicManager: ObservableObject {
                 }
             }
         }
+    }
+}
+
+/// iTunes Search API cover lookup. Only accepts a confident match: a wrong cover is worse than the app icon.
+enum CatalogArtwork {
+    private struct Response: Decodable { let results: [Track] }
+    private struct Track: Decodable {
+        let trackName: String?
+        let artistName: String?
+        let collectionName: String?
+        let artworkUrl100: String?
+    }
+
+    static func lookup(title: String, artist: String, album: String) async -> NSImage? {
+        // The KR storefront (and others without a music store) returns nothing, so fall back to US.
+        let stores = [Locale.current.region?.identifier ?? "US", "US"].reduce(into: [String]()) {
+            if !$0.contains($1) { $0.append($1) }
+        }
+        for store in stores {
+            guard let tracks = await search("\(artist) \(title)", store: store), !tracks.isEmpty else { continue }
+            guard let match = tracks.first(where: { matches($0, title: title, artist: artist, album: album) }),
+                  let small = match.artworkUrl100,
+                  let url = URL(string: small.replacingOccurrences(of: "100x100bb", with: "600x600bb")),
+                  let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+            return NSImage(data: data)
+        }
+        return nil
+    }
+
+    private static func search(_ term: String, store: String) async -> [Track]? {
+        var components = URLComponents(string: "https://itunes.apple.com/search")!
+        components.queryItems = [
+            URLQueryItem(name: "term", value: term),
+            URLQueryItem(name: "entity", value: "song"),
+            URLQueryItem(name: "limit", value: "10"),
+            URLQueryItem(name: "country", value: store),
+        ]
+        guard let url = components.url,
+              let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return (try? JSONDecoder().decode(Response.self, from: data))?.results
+    }
+
+    /// Same title, plus the same album or an overlapping artist name.
+    static func matches(_ track: (trackName: String?, artistName: String?, collectionName: String?),
+                        title: String, artist: String, album: String) -> Bool {
+        func norm(_ s: String?) -> String { (s ?? "").lowercased().trimmingCharacters(in: .whitespaces) }
+        guard !norm(title).isEmpty, norm(track.trackName) == norm(title) else { return false }
+        if !norm(album).isEmpty, norm(track.collectionName) == norm(album) { return true }
+        let a = norm(artist), b = norm(track.artistName)
+        return !a.isEmpty && !b.isEmpty && (a.contains(b) || b.contains(a))
+    }
+
+    private static func matches(_ track: Track, title: String, artist: String, album: String) -> Bool {
+        matches((track.trackName, track.artistName, track.collectionName), title: title, artist: artist, album: album)
     }
 }

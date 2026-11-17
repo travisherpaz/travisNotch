@@ -30,6 +30,8 @@ class AppleMusicController: MediaControllerProtocol {
 
     private var notificationTask: Task<Void, Never>?
     private var artworkRetryTask: Task<Void, Never>?
+    /// Last artwork we passed on, and the album it belonged to (to spot stale artwork, see below).
+    private var acceptedArtwork: (data: Data, album: String)?
     
     // MARK: - Initialization
     init() {
@@ -149,12 +151,24 @@ class AppleMusicController: MediaControllerProtocol {
         // The script returns "" when there's no artwork yet: that's empty Data, not nil, and would
         // otherwise count as "new artwork" that can't be decoded, leaving the previous cover up.
         let artwork = descriptor.atIndex(10)?.data
-        updatedState.artwork = artwork?.isEmpty == false ? artwork : nil
+        updatedState.artwork = acceptArtwork(artwork?.isEmpty == false ? artwork : nil, album: updatedState.album)
         let lovedState = descriptor.atIndex(11)?.booleanValue ?? false
         updatedState.isFavorite = lovedState
         updatedState.lastUpdated = Date()
         self.playbackState = updatedState
         retryArtworkIfMissing()
+    }
+
+    /// Right after a track change Music can still return the previous track's artwork. Identical bytes for
+    /// a different album means stale: report no artwork so the retry / catalog lookup take over.
+    /// (Same album sharing a cover is normal and passes.)
+    private func acceptArtwork(_ artwork: Data?, album: String) -> Data? {
+        guard let artwork else { return nil }
+        if let accepted = acceptedArtwork, accepted.data == artwork, accepted.album != album {
+            return nil
+        }
+        acceptedArtwork = (artwork, album)
+        return artwork
     }
 
     /// Music often posts playerInfo before a streamed track's artwork is loaded and won't post again
