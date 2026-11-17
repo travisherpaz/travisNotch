@@ -351,6 +351,8 @@ struct ContentView: View {
                         ShelfView()
                     case .notes:
                         NotesView()
+                    case .system:
+                        SystemView()
                     }
                 }
                 .transition(

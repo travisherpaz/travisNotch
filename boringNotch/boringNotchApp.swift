@@ -83,6 +83,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             screenUnlockedObserver = nil
         }
         MusicManager.shared.destroy()
+        if SystemView.fanPreset != "auto" {
+            XPCHelperClient.shared.resetFansToAutoSync()
+        }
         cleanupDragDetectors()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()

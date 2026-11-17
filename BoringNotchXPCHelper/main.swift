@@ -28,6 +28,14 @@ class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
+// The setuid-root copy installed at FanControl.installedToolPath only ever applies a fan preset.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "fan" {
+    if geteuid() == 0 { _ = setuid(0) }
+    exit(FanControl.apply(CommandLine.arguments[2]))
+}
+// Never run the XPC service with elevated privileges.
+if getuid() != geteuid() { exit(1) }
+
 // Create the delegate for the service.
 let delegate = ServiceDelegate()
 

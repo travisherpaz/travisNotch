@@ -188,4 +188,53 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             return nil
         }()
     }
+
+    // MARK: - System tab (temperature / fans)
+
+    @objc func systemStats(with reply: @escaping (NSNumber?, [NSNumber]) -> Void) {
+        guard let smc = SMC() else { reply(nil, []); return }
+        reply(smc.cpuTemperature().map { NSNumber(value: $0) }, smc.fanSpeeds().map { NSNumber(value: $0) })
+    }
+
+    /// Replies nil on success, otherwise an error message.
+    @objc func setFanPreset(_ preset: String, with reply: @escaping (String?) -> Void) {
+        guard FanControl.presets.contains(preset) else { reply("Unknown fan preset"); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let error = Self.installFanToolIfNeeded() { reply(error); return }
+            let (status, output) = Self.run(FanControl.installedToolPath, ["fan", preset])
+            reply(status == 0 ? nil : "Fan control failed (code \(status)) \(output)")
+        }
+    }
+
+    /// Writing fan keys needs root: install a setuid-root copy of this helper outside the app bundle
+    /// (rebuilds would replace an in-bundle copy). Asks for the admin password on first use and
+    /// again whenever the helper binary changes.
+    private static func installFanToolIfNeeded() -> String? {
+        guard let source = Bundle.main.executablePath else { return "Helper executable not found" }
+        let target = FanControl.installedToolPath
+        let fm = FileManager.default
+        if let attributes = try? fm.attributesOfItem(atPath: target),
+           (attributes[.ownerAccountID] as? NSNumber)?.intValue == 0,
+           ((attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0) & 0o4000 != 0,
+           fm.contentsEqual(atPath: source, andPath: target) {
+            return nil
+        }
+        let escaped = source.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let script = "do shell script \"/bin/mkdir -p /usr/local/libexec && /usr/bin/install -o root -g wheel -m 4755 \" & quoted form of \"\(escaped)\" & \" \(target)\" with prompt \"Boring Notch needs to install a helper to control fan speed.\" with administrator privileges"
+        let (status, output) = run("/usr/bin/osascript", ["-e", script])
+        return status == 0 ? nil : (output.isEmpty ? "Helper install failed" : output)
+    }
+
+    private static func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do { try process.run() } catch { return (-1, error.localizedDescription) }
+        process.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return (process.terminationStatus, output.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 }

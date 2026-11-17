@@ -241,6 +241,45 @@ final class XPCHelperClient: NSObject {
             return false
         }
     }
+
+    // MARK: - System tab
+
+    nonisolated func systemStats() async -> (cpu: Double?, fans: [Double]) {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.systemStats { cpu, fans in
+                    continuation.resume(returning: (cpu?.doubleValue, fans.map(\.doubleValue)))
+                }
+            }
+        } catch {
+            return (nil, [])
+        }
+    }
+
+    /// Returns nil on success, otherwise an error message.
+    nonisolated func setFanPreset(_ preset: String) async -> String? {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.setFanPreset(preset) { error in
+                    continuation.resume(returning: error)
+                }
+            }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// For app termination: the async path hops to the main actor, which is busy terminating.
+    nonisolated func resetFansToAutoSync() {
+        let conn = NSXPCConnection(serviceName: serviceName)
+        conn.remoteObjectInterface = NSXPCInterface(with: BoringNotchXPCHelperProtocol.self)
+        conn.resume()
+        defer { conn.invalidate() }
+        let proxy = conn.synchronousRemoteObjectProxyWithErrorHandler { _ in } as? BoringNotchXPCHelperProtocol
+        proxy?.setFanPreset("auto") { _ in }
+    }
 }
 
 extension Notification.Name {
