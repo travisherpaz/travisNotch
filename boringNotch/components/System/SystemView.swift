@@ -62,7 +62,7 @@ struct SystemView: View {
         card("thermometer.medium", "Thermal") {
             gaugeRow(
                 fraction: (ssd ?? 0) / 80, label: ssd.map { String(format: "%.1f°", $0) } ?? "--",
-                caption: "SSD", color: severity((ssd ?? 0) / 70),
+                caption: "SSD", color: severity(ssd ?? 0, warn: 60, critical: 70), // SSDs throttle around 70°C
                 details: fans.indices.map { ("Fan \($0 + 1)", "\(Int(fans[$0])) rpm") }
             )
             HStack(spacing: 4) {
@@ -93,7 +93,8 @@ struct SystemView: View {
         let usage = stats.cpuUser + stats.cpuSystem
         return card("cpu", "CPU") {
             gaugeRow(
-                fraction: usage / 100, label: percent(usage), caption: "used", color: severity(usage / 100),
+                fraction: usage / 100, label: percent(usage), caption: "used",
+                color: severity(usage, warn: 80, critical: 95), // short spikes are normal
                 details: [("System", percent(stats.cpuSystem)), ("User", percent(stats.cpuUser)), ("Idle", percent(stats.cpuIdle))]
             )
             Sparkline(series: [(cpuHistory, .green)], length: Self.historyLength, maxValue: 100)
@@ -104,7 +105,8 @@ struct SystemView: View {
         card("memorychip", "Memory") {
             gaugeRow(
                 fraction: stats.memoryUsedFraction, label: percent(stats.memoryUsedFraction * 100), caption: "used",
-                color: severity(stats.memoryPressure / 100),
+                // macOS keeps RAM full on purpose; color by the kernel's own pressure level instead of usage.
+                color: stats.memoryPressureLevel >= 4 ? .red : stats.memoryPressureLevel >= 2 ? .orange : .green,
                 details: [
                     ("Pressure", stats.memoryPressure.isNaN ? "--" : percent(stats.memoryPressure)),
                     ("App", bytes(stats.memoryApp)),
@@ -119,7 +121,7 @@ struct SystemView: View {
         card("internaldrive", "Storage") {
             gaugeRow(
                 fraction: stats.storageUsedFraction, label: percent(stats.storageUsedFraction * 100), caption: "used",
-                color: severity(stats.storageUsedFraction),
+                color: severity(stats.storageUsedFraction * 100, warn: 85, critical: 95),
                 details: [
                     ("Used", bytes(stats.storageUsed)),
                     ("Free", bytes(stats.storageTotal - stats.storageUsed)),
@@ -135,7 +137,8 @@ struct SystemView: View {
             gaugeRow(
                 fraction: level / 100, label: stats.batteryLevel.map { "\($0)%" } ?? "--",
                 caption: stats.onACPower ? "AC" : "battery",
-                color: level < 20 ? .red : level < 40 ? .orange : .green,
+                // macOS low-battery warnings fire at 20% and 10%; on AC there's nothing to act on.
+                color: stats.onACPower ? .green : severity(100 - level, warn: 80, critical: 90),
                 details: [
                     ("Health", stats.batteryHealth.map { percent($0) } ?? "--"),
                     ("Cycles", stats.batteryCycles.map(String.init) ?? "--"),
@@ -199,9 +202,9 @@ struct SystemView: View {
         if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
     }
 
-    /// Green → orange → red as a load fraction rises.
-    private func severity(_ fraction: Double) -> Color {
-        fraction < 0.6 ? .green : fraction < 0.85 ? .orange : .red
+    /// Per-metric thresholds: each card passes the levels that actually matter for it.
+    private func severity(_ value: Double, warn: Double, critical: Double) -> Color {
+        value >= critical ? .red : value >= warn ? .orange : .green
     }
 
     private func percent(_ value: Double) -> String { String(format: "%.1f%%", value) }
@@ -286,6 +289,8 @@ final class SystemSampler {
         var cpuUser = 0.0, cpuSystem = 0.0, cpuIdle = 0.0
         var memoryApp: Int64 = 0, memoryWired: Int64 = 0, memoryCompressed: Int64 = 0, memoryTotal: Int64 = 0
         var memoryPressure = Double.nan
+        /// kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical (Activity Monitor's colors).
+        var memoryPressureLevel = 1
         var memoryUsedFraction: Double {
             memoryTotal > 0 ? Double(memoryApp + memoryWired + memoryCompressed) / Double(memoryTotal) : 0
         }
@@ -361,6 +366,9 @@ final class SystemSampler {
         var size = MemoryLayout<Int32>.size
         if sysctlbyname("kern.memorystatus_level", &level, &size, nil, 0) == 0 {
             stats.memoryPressure = Double(100 - level)
+        }
+        if sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0 {
+            stats.memoryPressureLevel = Int(level)
         }
     }
 
