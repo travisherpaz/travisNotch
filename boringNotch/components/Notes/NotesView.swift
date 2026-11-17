@@ -201,6 +201,7 @@ private struct RichNoteEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = context.coordinator
+        textView.textStorage?.delegate = context.coordinator
 
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false
@@ -223,11 +224,20 @@ private struct RichNoteEditor: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
         var parent: RichNoteEditor
         var lastRTF: Data?
 
         init(_ parent: RichNoteEditor) { self.parent = parent }
+
+        /// Pasted rich text brings its own colors (often black, invisible on the dark card) and
+        /// highlights: force white text, drop backgrounds. Bold/underline stay. Also fixes old notes on load.
+        func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+                         range editedRange: NSRange, changeInLength delta: Int) {
+            guard editedMask.contains(.editedCharacters), editedRange.length > 0 else { return }
+            textStorage.addAttribute(.foregroundColor, value: NSColor.white, range: editedRange)
+            textStorage.removeAttribute(.backgroundColor, range: editedRange)
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let storage = (notification.object as? NSTextView)?.textStorage else { return }
