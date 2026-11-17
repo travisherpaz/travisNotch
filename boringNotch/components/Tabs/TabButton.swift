@@ -16,8 +16,7 @@ struct TabButton: View {
     var body: some View {
         Button(action: onClick) {
             Image(systemName: icon)
-                // 5 tabs must fit left of the hardware notch (~172pt with a 224pt notch at "More Space" scaling).
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 15)
                 .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
