@@ -65,6 +65,17 @@ class BoringViewModel: NSObject, ObservableObject {
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
             .store(in: &cancellables)
+
+        // Use the published values: $currentView fires on willSet, before the property changes.
+        Publishers.CombineLatest(coordinator.$currentView, Defaults.publisher(.notes).map(\.newValue.count))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] view, noteCount in
+                guard let self, self.notchState == .open else { return }
+                withAnimation(.smooth) {
+                    self.notchSize = Self.openSize(view: view, noteCount: noteCount)
+                }
+            }
+            .store(in: &cancellables)
         
         setupDetectorObserver()
     }
@@ -189,8 +200,13 @@ class BoringViewModel: NSObject, ObservableObject {
         return false
     }
 
+    private static func openSize(view: NotchViews, noteCount: Int) -> CGSize {
+        guard view == .notes, noteCount > 2 else { return openNotchSize }
+        return CGSize(width: openNotchSize.width, height: openNotchSize.height + notesExtraRowHeight)
+    }
+
     func open() {
-        self.notchSize = openNotchSize
+        self.notchSize = Self.openSize(view: coordinator.currentView, noteCount: Defaults[.notes].count)
         self.notchState = .open
         
         // Force music information update when notch is opened
