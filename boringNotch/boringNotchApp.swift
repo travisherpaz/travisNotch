@@ -533,7 +533,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             vm.screenUUID = selectedScreen.displayUUID
-            vm.notchSize = getClosedNotchSize(screenUUID: selectedScreen.displayUUID)
+            // Only shrink to the closed size when closed: an open notch (e.g. kept open across a lid
+            // close/open) would otherwise lay its open content out in the closed height and get cut off.
+            vm.closedNotchSize = getClosedNotchSize(screenUUID: selectedScreen.displayUUID)
+            if vm.notchState == .closed {
+                vm.notchSize = vm.closedNotchSize
+            }
 
             if window == nil {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)
