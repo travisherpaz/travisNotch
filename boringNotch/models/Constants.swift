@@ -173,7 +173,8 @@ extension Defaults.Keys {
     static let expandedDragDetection = Key<Bool>("expandedDragDetection", default: true)
 
     // MARK: Notes
-    static let notes = Key<[String]>("notes", default: ["", ""])
+    // RTF per note (bold/underline); empty Data = empty note.
+    static let notes = Key<[Data]>("notesRTF", default: [Data(), Data()])
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)

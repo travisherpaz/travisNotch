@@ -5303,6 +5303,9 @@
         }
       }
     },
+    "Click outside the notch to close it" : {
+
+    },
     "Close" : {
       "localizations" : {
         "ar" : {
@@ -11909,6 +11912,9 @@
           }
         }
       }
+    },
+    "Keep notch open when mouse leaves" : {
+
     },
     "Layout Preview" : {
       "localizations" : {
