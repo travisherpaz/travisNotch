@@ -57,14 +57,16 @@ struct SystemView: View {
     }
 
     // MARK: - Cards
+    // Form per job: single value vs a limit → hero number + meter; value over time → hero + line;
+    // one whole split into parts → segmented bar + legend. Status colors always ship with a label.
 
+    /// SSD temperature against its throttle point, plus fans.
     private var thermalCard: some View {
-        card("thermometer.medium", "Thermal") {
-            gaugeRow(
-                fraction: (ssd ?? 0) / 80, label: ssd.map { String(format: "%.1f°", $0) } ?? "--",
-                caption: "SSD", color: severity(ssd ?? 0, warn: 60, critical: 70), // SSDs throttle around 70°C
-                details: fans.indices.map { ("Fan \($0 + 1)", "\(Int(fans[$0])) rpm") }
-            )
+        let status = ssd.map { Status($0, warn: 60, critical: 70, labels: ("Normal", "Warm", "Hot")) } // SSDs throttle ~70°C
+        return card("thermometer.medium", "SSD", status: status) {
+            hero(ssd.map { String(format: "%.1f°C", $0) } ?? "--")
+            Meter(fraction: ((ssd ?? 20) - 20) / 60, color: status?.color ?? .gray) // 20–80°C scale
+            ForEach(fans.indices, id: \.self) { detail("Fan \($0 + 1)", "\(Int(fans[$0])) rpm") }
             HStack(spacing: 4) {
                 ForEach(presets, id: \.0) { id, title in
                     Button {
@@ -73,7 +75,7 @@ struct SystemView: View {
                         Text(applying == id ? "…" : title)
                             .font(.system(size: 11, weight: .medium))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 3)
                             .background(Capsule().fill(Color.white.opacity(preset == id ? 0.25 : 0.08)))
                     }
                     .buttonStyle(.plain)
@@ -89,84 +91,91 @@ struct SystemView: View {
         }
     }
 
+    /// Current load + its split, then the last minute. Short spikes are normal, so the bar is high.
     private var cpuCard: some View {
         let usage = stats.cpuUser + stats.cpuSystem
-        return card("cpu", "CPU") {
-            gaugeRow(
-                fraction: usage / 100, label: percent(usage), caption: "used",
-                color: severity(usage, warn: 80, critical: 95), // short spikes are normal
-                details: [("System", percent(stats.cpuSystem)), ("User", percent(stats.cpuUser)), ("Idle", percent(stats.cpuIdle))]
-            )
-            Sparkline(series: [(cpuHistory, .green)], length: Self.historyLength, maxValue: 100)
+        return card("cpu", "CPU", status: Status(usage, warn: 80, critical: 95, labels: ("Normal", "Busy", "Maxed"))) {
+            hero(percent(usage))
+            SegmentedBar(parts: [(stats.cpuSystem / 100, Palette.series1), (stats.cpuUser / 100, Palette.series2)])
+            HStack(spacing: 10) {
+                legend(Palette.series1, "System", percent(stats.cpuSystem))
+                legend(Palette.series2, "User", percent(stats.cpuUser))
+            }
+            Sparkline(series: [(cpuHistory, Palette.series1)], length: Self.historyLength, maxValue: 100)
         }
     }
 
+    /// macOS keeps RAM full on purpose: show how it splits, and judge it by the kernel's pressure level.
     private var memoryCard: some View {
-        card("memorychip", "Memory") {
-            gaugeRow(
-                fraction: stats.memoryUsedFraction, label: percent(stats.memoryUsedFraction * 100), caption: "used",
-                // macOS keeps RAM full on purpose; color by the kernel's own pressure level instead of usage.
-                color: stats.memoryPressureLevel >= 4 ? .red : stats.memoryPressureLevel >= 2 ? .orange : .green,
-                details: [
-                    ("Pressure", stats.memoryPressure.isNaN ? "--" : percent(stats.memoryPressure)),
-                    ("App", bytes(stats.memoryApp)),
-                    ("Wired", bytes(stats.memoryWired)),
-                    ("Compr.", bytes(stats.memoryCompressed)),
-                ]
-            )
+        let total = Double(max(stats.memoryTotal, 1))
+        let status: Status = stats.memoryPressureLevel >= 4 ? .critical("Critical")
+            : stats.memoryPressureLevel >= 2 ? .warning("Pressure") : .normal("Normal")
+        return card("memorychip", "Memory", status: status) {
+            hero(percent(stats.memoryUsedFraction * 100), sub: "of \(memory(stats.memoryTotal))")
+            SegmentedBar(parts: [
+                (Double(stats.memoryApp) / total, Palette.series1),
+                (Double(stats.memoryWired) / total, Palette.series2),
+                (Double(stats.memoryCompressed) / total, Palette.series3),
+            ])
+            legend(Palette.series1, "App", memory(stats.memoryApp))
+            legend(Palette.series2, "Wired", memory(stats.memoryWired))
+            legend(Palette.series3, "Compressed", memory(stats.memoryCompressed))
         }
     }
 
+    /// Used space against capacity.
     private var storageCard: some View {
-        card("internaldrive", "Storage") {
-            gaugeRow(
-                fraction: stats.storageUsedFraction, label: percent(stats.storageUsedFraction * 100), caption: "used",
-                color: severity(stats.storageUsedFraction * 100, warn: 85, critical: 95),
-                details: [
-                    ("Used", bytes(stats.storageUsed)),
-                    ("Free", bytes(stats.storageTotal - stats.storageUsed)),
-                    ("Total", bytes(stats.storageTotal)),
-                ]
-            )
+        let used = stats.storageUsedFraction * 100
+        let status = Status(used, warn: 85, critical: 95, labels: ("Normal", "Low space", "Full"))
+        return card("internaldrive", "Storage", status: status) {
+            hero(percent(used), sub: "used")
+            Meter(fraction: stats.storageUsedFraction, color: status.color)
+            detail("Used", bytes(stats.storageUsed))
+            detail("Free", bytes(stats.storageTotal - stats.storageUsed))
+            detail("Total", bytes(stats.storageTotal))
         }
     }
 
+    /// Charge against full. macOS warns at 20% / 10%; on AC there's nothing to act on.
     private var batteryCard: some View {
         let level = Double(stats.batteryLevel ?? 0)
-        return card(stats.onACPower ? "battery.100percent.bolt" : "battery.75percent", "Battery") {
-            gaugeRow(
-                fraction: level / 100, label: stats.batteryLevel.map { "\($0)%" } ?? "--",
-                caption: stats.onACPower ? "AC" : "battery",
-                // macOS low-battery warnings fire at 20% and 10%; on AC there's nothing to act on.
-                color: stats.onACPower ? .green : severity(100 - level, warn: 80, critical: 90),
-                details: [
-                    ("Health", stats.batteryHealth.map { percent($0) } ?? "--"),
-                    ("Cycles", stats.batteryCycles.map(String.init) ?? "--"),
-                    ("Temp", batteryTemp.map { String(format: "%.1f°C", $0) } ?? "--"),
-                ]
-            )
+        let status = stats.onACPower ? .normal("Charging")
+            : Status(100 - level, warn: 80, critical: 90, labels: ("Normal", "Low", "Critical"))
+        return card(stats.onACPower ? "battery.100percent.bolt" : "battery.75percent", "Battery", status: status) {
+            hero(stats.batteryLevel.map { "\($0)%" } ?? "--", sub: stats.onACPower ? "AC power" : "on battery")
+            Meter(fraction: level / 100, color: status.color)
+            detail("Health", stats.batteryHealth.map { percent($0) } ?? "--")
+            detail("Cycles", stats.batteryCycles.map(String.init) ?? "--")
+            detail("Temp", batteryTemp.map { String(format: "%.1f°C", $0) } ?? "--")
         }
     }
 
+    /// Two rates in the same unit over the last minute → one shared axis, two lines.
     private var networkCard: some View {
-        card("network", stats.networkName) {
-            VStack(alignment: .leading, spacing: 2) {
-                detail("IP", stats.localIP ?? "--")
-                detail("↓ Down", "\(bytes(stats.downloadPerSecond))/s", color: .cyan)
-                detail("↑ Up", "\(bytes(stats.uploadPerSecond))/s", color: .pink)
-            }
-            Sparkline(series: [(downloadHistory, .cyan), (uploadHistory, .pink)], length: Self.historyLength, maxValue: nil)
+        card("network", stats.networkName, status: nil) {
+            detail("IP", stats.localIP ?? "--")
+            legend(Palette.series1, "Download", "\(bytes(stats.downloadPerSecond))/s")
+            legend(Palette.series2, "Upload", "\(bytes(stats.uploadPerSecond))/s")
+            Sparkline(series: [(downloadHistory, Palette.series1), (uploadHistory, Palette.series2)],
+                      length: Self.historyLength, maxValue: nil)
         }
     }
 
     // MARK: - Building blocks
 
-    private func card<Content: View>(_ icon: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.gray)
-                .lineLimit(1)
+    private func card<Content: View>(_ icon: String, _ title: String, status: Status?, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Label(title, systemImage: icon)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let status {
+                    Circle().fill(status.color).frame(width: 6, height: 6)
+                    Text(status.label)
+                }
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.gray)
             content()
             Spacer(minLength: 0)
         }
@@ -175,19 +184,34 @@ struct SystemView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
     }
 
-    private func gaugeRow(fraction: Double, label: String, caption: String, color: Color, details: [(String, String)]) -> some View {
-        HStack(spacing: 10) {
-            RingGauge(fraction: fraction, label: label, caption: caption, color: color)
-                .frame(width: 62, height: 62)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(details, id: \.0) { detail($0.0, $0.1) }
+    private func hero(_ value: String, sub: String? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            if let sub {
+                Text(sub)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.gray)
             }
         }
     }
 
-    private func detail(_ name: String, _ value: String, color: Color = .gray) -> some View {
+    private func detail(_ name: String, _ value: String) -> some View {
         HStack(spacing: 4) {
-            Text(name).foregroundStyle(color)
+            Text(name).foregroundStyle(.gray)
+            Spacer(minLength: 4)
+            Text(value).monospacedDigit()
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+    }
+
+    /// Swatch carries the series identity; the text stays in text colors.
+    private func legend(_ color: Color, _ name: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 8)
+            Text(name).foregroundStyle(.gray)
             Spacer(minLength: 4)
             Text(value).monospacedDigit()
         }
@@ -202,13 +226,10 @@ struct SystemView: View {
         if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
     }
 
-    /// Per-metric thresholds: each card passes the levels that actually matter for it.
-    private func severity(_ value: Double, warn: Double, critical: Double) -> Color {
-        value >= critical ? .red : value >= warn ? .orange : .green
-    }
-
     private func percent(_ value: Double) -> String { String(format: "%.1f%%", value) }
     private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .file) }
+    /// RAM is sized in binary units (24 GB, not 25.77 GB).
+    private func memory(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .memory) }
 
     private func apply(_ id: String) async {
         applying = id
@@ -223,36 +244,84 @@ struct SystemView: View {
     }
 }
 
-/// Netdata-style ring: grey track, colored arc, value in the middle.
-private struct RingGauge: View {
-    let fraction: Double
-    let label: String
-    let caption: String
-    let color: Color
+/// Dark-mode steps of the reference categorical palette (validated: CVD ΔE 9.4 on dark) and its status colors.
+private enum Palette {
+    static let series1 = Color(rgb: 0x3987E5) // blue
+    static let series2 = Color(rgb: 0xD95926) // orange
+    static let series3 = Color(rgb: 0x199E70) // aqua
+    static let good = Color(rgb: 0x0CA30C)
+    static let warning = Color(rgb: 0xFAB219)
+    static let critical = Color(rgb: 0xD03B3B)
+}
 
-    var body: some View {
-        ZStack {
-            Circle().stroke(Color.white.opacity(0.1), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: min(max(fraction, 0), 1))
-                .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.smooth, value: fraction)
-            VStack(spacing: 0) {
-                Text(label)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.7)
-                Text(caption)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.gray)
-            }
-            .padding(8)
+private extension Color {
+    init(rgb: UInt32) {
+        self.init(red: Double(rgb >> 16 & 0xFF) / 255, green: Double(rgb >> 8 & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
+    }
+}
+
+/// Per-metric thresholds: each card passes the levels that actually matter for it.
+private enum Status {
+    case normal(String), warning(String), critical(String)
+
+    init(_ value: Double, warn: Double, critical: Double, labels: (String, String, String)) {
+        self = value >= critical ? .critical(labels.2) : value >= warn ? .warning(labels.1) : .normal(labels.0)
+    }
+
+    var label: String {
+        switch self { case .normal(let l), .warning(let l), .critical(let l): l }
+    }
+
+    var color: Color {
+        switch self {
+        case .normal: Palette.good
+        case .warning: Palette.warning
+        case .critical: Palette.critical
         }
     }
 }
 
-/// Filled line chart over the last `length` samples; several series share one y scale.
+/// A single ratio against its limit: grey track, filled share.
+private struct Meter: View {
+    let fraction: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.1))
+                Capsule().fill(color)
+                    .frame(width: geo.size.width * min(max(fraction, 0), 1))
+                    .animation(.smooth, value: fraction)
+            }
+        }
+        .frame(height: 6)
+    }
+}
+
+/// One whole split into parts; the unfilled remainder is the grey track. 2pt gaps between parts.
+private struct SegmentedBar: View {
+    let parts: [(fraction: Double, color: Color)]
+
+    var body: some View {
+        GeometryReader { geo in
+            let visible = parts.filter { $0.fraction > 0 }
+            let gaps = CGFloat(max(visible.count, 1)) * 2
+            HStack(spacing: 2) {
+                ForEach(visible.indices, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(visible[i].color)
+                        .frame(width: max((geo.size.width - gaps) * min(visible[i].fraction, 1), 2))
+                }
+                RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.1))
+            }
+            .animation(.smooth, value: parts.map(\.fraction))
+        }
+        .frame(height: 8)
+    }
+}
+
+/// Lines over the last `length` samples; several series share one y scale (never a second axis).
 private struct Sparkline: View {
     let series: [([Double], Color)]
     let length: Int
@@ -264,11 +333,10 @@ private struct Sparkline: View {
             ForEach(series.indices, id: \.self) { s in
                 let (values, color) = series[s]
                 ForEach(values.indices, id: \.self) { i in
-                    AreaMark(x: .value("t", i), y: .value("v", values[i]), series: .value("s", s))
-                        .foregroundStyle(color.opacity(0.25))
                     LineMark(x: .value("t", i), y: .value("v", values[i]), series: .value("s", s))
                         .foregroundStyle(color)
-                        .lineStyle(StrokeStyle(lineWidth: 1.2))
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.monotone)
                 }
             }
         }
@@ -277,7 +345,7 @@ private struct Sparkline: View {
         .chartLegend(.hidden)
         .chartXScale(domain: 0...(length - 1))
         .chartYScale(domain: 0...top)
-        .frame(maxHeight: .infinity)
+        .frame(minHeight: 20, maxHeight: .infinity)
     }
 }
 
