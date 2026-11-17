@@ -14,9 +14,12 @@ let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 let shadowPadding: CGFloat = 20
 let openNotchSize: CGSize = .init(width: 640, height: 190)
-// Notes tab adds one more row of this height when its 2x2 grid needs a second row (3-4 notes).
-let notesExtraRowHeight: CGFloat = 144
-let windowSize: CGSize = .init(width: openNotchSize.width, height: openNotchSize.height + notesExtraRowHeight + shadowPadding)
+// Notes tab: rows are ~as tall as a note is wide (~290-300pt), so each note is near-square.
+let notesRowHeight: CGFloat = 295
+// Open-notch height outside the notes grid (header + paddings): 190pt notch held a 136pt row.
+let notesChromeHeight: CGFloat = openNotchSize.height - 136
+let notesMaxNotchHeight: CGFloat = notesChromeHeight + notesRowHeight * 2 + 8
+let windowSize: CGSize = .init(width: openNotchSize.width, height: max(openNotchSize.height, notesMaxNotchHeight) + shadowPadding)
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 enum MusicPlayerImageSizes {
