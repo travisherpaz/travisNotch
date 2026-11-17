@@ -901,6 +901,9 @@
         }
       }
     },
+    "%lld RPM" : {
+
+    },
     "%lld%%" : {
       "localizations" : {
         "ar" : {
@@ -6206,6 +6209,9 @@
         }
       }
     },
+    "CPU" : {
+
+    },
     "Currently selected: %@" : {
       "localizations" : {
         "ar" : {
@@ -9411,6 +9417,9 @@
           }
         }
       }
+    },
+    "Fan %lld" : {
+
     },
     "Files dropped on the shelf will be shared via this service" : {
       "localizations" : {
