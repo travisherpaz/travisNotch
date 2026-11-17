@@ -18,8 +18,10 @@ let openNotchSize: CGSize = .init(width: 640, height: 190)
 let notesRowHeight: CGFloat = 295
 // Open-notch height outside the notes grid (header + paddings): 190pt notch held a 136pt row.
 let notesChromeHeight: CGFloat = openNotchSize.height - 136
+// System tab: 3x2 grid of cards, ~150pt per row.
+let systemNotchHeight: CGFloat = notesChromeHeight + 150 * 2 + 6
 let notesMaxNotchHeight: CGFloat = notesChromeHeight + notesRowHeight * 2 + 8
-let windowSize: CGSize = .init(width: openNotchSize.width, height: max(openNotchSize.height, notesMaxNotchHeight) + shadowPadding)
+let windowSize: CGSize = .init(width: openNotchSize.width, height: max(openNotchSize.height, notesMaxNotchHeight, systemNotchHeight) + shadowPadding)
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 enum MusicPlayerImageSizes {

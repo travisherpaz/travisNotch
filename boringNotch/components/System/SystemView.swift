@@ -3,6 +3,7 @@
 //  boringNotch
 //
 
+import Charts
 import IOKit
 import Network
 import SwiftUI
@@ -10,9 +11,13 @@ import SwiftUI
 struct SystemView: View {
     /// Preset applied this session. The app resets fans to "auto" on quit when it isn't.
     @MainActor static var fanPreset = "auto"
+    private static let historyLength = 30 // 2s samples: one minute
 
     @State private var sampler = SystemSampler()
     @State private var stats = SystemSampler.Stats()
+    @State private var cpuHistory: [Double] = []
+    @State private var downloadHistory: [Double] = []
+    @State private var uploadHistory: [Double] = []
     @State private var ssd: Double?
     @State private var batteryTemp: Double?
     @State private var fans: [Double] = []
@@ -23,41 +28,25 @@ struct SystemView: View {
     private let presets = [("auto", "Auto"), ("3500", "3500"), ("max", "Max")]
 
     var body: some View {
-        HStack(spacing: 6) {
-            thermalCard
-                .frame(width: 150)
-
-            infoCard(icon: "cpu", title: "CPU", value: percent(stats.cpuUser + stats.cpuSystem), lines: [
-                "System \(percent(stats.cpuSystem))",
-                "User \(percent(stats.cpuUser))",
-                "Idle \(percent(stats.cpuIdle))",
-            ])
-
-            infoCard(icon: "internaldrive", title: "Storage", value: percent(stats.storageUsedFraction * 100), lines: [
-                "\(bytes(stats.storageUsed)) / \(bytes(stats.storageTotal))",
-            ]) {
-                ProgressView(value: stats.storageUsedFraction)
-                    .progressViewStyle(.linear)
-                    .tint(.blue)
+        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+            GridRow {
+                thermalCard
+                cpuCard
+                memoryCard
             }
-
-            infoCard(icon: "battery.75percent", title: "Battery", value: stats.batteryLevel.map { "\($0)%" } ?? "--", lines: [
-                stats.onACPower ? "AC Power" : "Battery",
-                "Health \(stats.batteryHealth.map { percent($0) } ?? "--")",
-                "Cycles \(stats.batteryCycles.map(String.init) ?? "--")",
-                "Temp \(celsius(batteryTemp))",
-            ])
-
-            infoCard(icon: "network", title: stats.networkName, value: nil, lines: [
-                stats.localIP ?? "No IP",
-                "↑ \(bytes(stats.uploadPerSecond))/s",
-                "↓ \(bytes(stats.downloadPerSecond))/s",
-            ])
+            GridRow {
+                storageCard
+                batteryCard
+                networkCard
+            }
         }
         .padding(.top, 4)
         .task {
             while !Task.isCancelled {
                 stats = sampler.sample()
+                append(stats.cpuUser + stats.cpuSystem, to: &cpuHistory)
+                append(Double(stats.downloadPerSecond), to: &downloadHistory)
+                append(Double(stats.uploadPerSecond), to: &uploadHistory)
                 let thermal = await XPCHelperClient.shared.systemStats()
                 ssd = thermal.ssd
                 batteryTemp = thermal.battery
@@ -70,22 +59,12 @@ struct SystemView: View {
     // MARK: - Cards
 
     private var thermalCard: some View {
-        VStack(spacing: 6) {
-            VStack(spacing: 0) {
-                Text("SSD")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.gray)
-                Text(celsius(ssd))
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(ssdColor)
-            }
-
-            Text(fans.isEmpty ? "No fans" : fans.map { "\(Int($0))" }.joined(separator: " · ") + " RPM")
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .foregroundStyle(.gray)
-
+        card("thermometer.medium", "Thermal") {
+            gaugeRow(
+                fraction: (ssd ?? 0) / 80, label: ssd.map { String(format: "%.1f°", $0) } ?? "--",
+                caption: "SSD", color: severity((ssd ?? 0) / 70),
+                details: fans.indices.map { ("Fan \($0 + 1)", "\(Int(fans[$0])) rpm") }
+            )
             HStack(spacing: 4) {
                 ForEach(presets, id: \.0) { id, title in
                     Button {
@@ -101,7 +80,6 @@ struct SystemView: View {
                     .disabled(applying != nil)
                 }
             }
-
             if let error {
                 Text(error)
                     .font(.system(size: 9))
@@ -109,63 +87,125 @@ struct SystemView: View {
                     .lineLimit(2)
             }
         }
-        .padding(8)
-        .frame(maxHeight: .infinity)
-        .background(card)
     }
 
-    private func infoCard(
-        icon: String, title: String, value: String?, lines: [String],
-        @ViewBuilder footer: () -> some View = { EmptyView() }
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                Text(title)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 11))
-            .foregroundStyle(.gray)
+    private var cpuCard: some View {
+        let usage = stats.cpuUser + stats.cpuSystem
+        return card("cpu", "CPU") {
+            gaugeRow(
+                fraction: usage / 100, label: percent(usage), caption: "used", color: severity(usage / 100),
+                details: [("System", percent(stats.cpuSystem)), ("User", percent(stats.cpuUser)), ("Idle", percent(stats.cpuIdle))]
+            )
+            Sparkline(series: [(cpuHistory, .green)], length: Self.historyLength, maxValue: 100)
+        }
+    }
 
-            if let value {
-                Text(value)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-            }
+    private var memoryCard: some View {
+        card("memorychip", "Memory") {
+            gaugeRow(
+                fraction: stats.memoryUsedFraction, label: percent(stats.memoryUsedFraction * 100), caption: "used",
+                color: severity(stats.memoryPressure / 100),
+                details: [
+                    ("Pressure", stats.memoryPressure.isNaN ? "--" : percent(stats.memoryPressure)),
+                    ("App", bytes(stats.memoryApp)),
+                    ("Wired", bytes(stats.memoryWired)),
+                    ("Compr.", bytes(stats.memoryCompressed)),
+                ]
+            )
+        }
+    }
 
-            ForEach(lines, id: \.self) { line in
-                Text(line)
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundStyle(.gray)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+    private var storageCard: some View {
+        card("internaldrive", "Storage") {
+            gaugeRow(
+                fraction: stats.storageUsedFraction, label: percent(stats.storageUsedFraction * 100), caption: "used",
+                color: severity(stats.storageUsedFraction),
+                details: [
+                    ("Used", bytes(stats.storageUsed)),
+                    ("Free", bytes(stats.storageTotal - stats.storageUsed)),
+                    ("Total", bytes(stats.storageTotal)),
+                ]
+            )
+        }
+    }
 
-            footer()
+    private var batteryCard: some View {
+        let level = Double(stats.batteryLevel ?? 0)
+        return card(stats.onACPower ? "battery.100percent.bolt" : "battery.75percent", "Battery") {
+            gaugeRow(
+                fraction: level / 100, label: stats.batteryLevel.map { "\($0)%" } ?? "--",
+                caption: stats.onACPower ? "AC" : "battery",
+                color: level < 20 ? .red : level < 40 ? .orange : .green,
+                details: [
+                    ("Health", stats.batteryHealth.map { percent($0) } ?? "--"),
+                    ("Cycles", stats.batteryCycles.map(String.init) ?? "--"),
+                    ("Temp", batteryTemp.map { String(format: "%.1f°C", $0) } ?? "--"),
+                ]
+            )
+        }
+    }
+
+    private var networkCard: some View {
+        card("network", stats.networkName) {
+            VStack(alignment: .leading, spacing: 2) {
+                detail("IP", stats.localIP ?? "--")
+                detail("↓ Down", "\(bytes(stats.downloadPerSecond))/s", color: .cyan)
+                detail("↑ Up", "\(bytes(stats.uploadPerSecond))/s", color: .pink)
+            }
+            Sparkline(series: [(downloadHistory, .cyan), (uploadHistory, .pink)], length: Self.historyLength, maxValue: nil)
+        }
+    }
+
+    // MARK: - Building blocks
+
+    private func card<Content: View>(_ icon: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.gray)
+                .lineLimit(1)
+            content()
             Spacer(minLength: 0)
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(card)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
     }
 
-    private var card: some View {
-        RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08))
+    private func gaugeRow(fraction: Double, label: String, caption: String, color: Color, details: [(String, String)]) -> some View {
+        HStack(spacing: 10) {
+            RingGauge(fraction: fraction, label: label, caption: caption, color: color)
+                .frame(width: 62, height: 62)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(details, id: \.0) { detail($0.0, $0.1) }
+            }
+        }
     }
 
-    // MARK: - Formatting
+    private func detail(_ name: String, _ value: String, color: Color = .gray) -> some View {
+        HStack(spacing: 4) {
+            Text(name).foregroundStyle(color)
+            Spacer(minLength: 4)
+            Text(value).monospacedDigit()
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+    }
+
+    // MARK: - Helpers
+
+    private func append(_ value: Double, to history: inout [Double]) {
+        history.append(value)
+        if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
+    }
+
+    /// Green → orange → red as a load fraction rises.
+    private func severity(_ fraction: Double) -> Color {
+        fraction < 0.6 ? .green : fraction < 0.85 ? .orange : .red
+    }
 
     private func percent(_ value: Double) -> String { String(format: "%.1f%%", value) }
-    private func celsius(_ value: Double?) -> String { value.map { String(format: "%.1f°C", $0) } ?? "--" }
     private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .file) }
-
-    private var ssdColor: Color {
-        // SSDs typically start throttling around 70°C.
-        guard let ssd else { return .white }
-        return ssd < 60 ? .white : ssd < 70 ? .orange : .red
-    }
 
     private func apply(_ id: String) async {
         applying = id
@@ -180,12 +220,75 @@ struct SystemView: View {
     }
 }
 
+/// Netdata-style ring: grey track, colored arc, value in the middle.
+private struct RingGauge: View {
+    let fraction: Double
+    let label: String
+    let caption: String
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.1), lineWidth: 6)
+            Circle()
+                .trim(from: 0, to: min(max(fraction, 0), 1))
+                .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.smooth, value: fraction)
+            VStack(spacing: 0) {
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                Text(caption)
+                    .font(.system(size: 8))
+                    .foregroundStyle(.gray)
+            }
+            .padding(8)
+        }
+    }
+}
+
+/// Filled line chart over the last `length` samples; several series share one y scale.
+private struct Sparkline: View {
+    let series: [([Double], Color)]
+    let length: Int
+    let maxValue: Double?
+
+    var body: some View {
+        let top = maxValue ?? max(series.flatMap(\.0).max() ?? 1, 1)
+        Chart {
+            ForEach(series.indices, id: \.self) { s in
+                let (values, color) = series[s]
+                ForEach(values.indices, id: \.self) { i in
+                    AreaMark(x: .value("t", i), y: .value("v", values[i]), series: .value("s", s))
+                        .foregroundStyle(color.opacity(0.25))
+                    LineMark(x: .value("t", i), y: .value("v", values[i]), series: .value("s", s))
+                        .foregroundStyle(color)
+                        .lineStyle(StrokeStyle(lineWidth: 1.2))
+                }
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .chartXScale(domain: 0...(length - 1))
+        .chartYScale(domain: 0...top)
+        .frame(maxHeight: .infinity)
+    }
+}
+
 // MARK: - Sampling
 
-/// Reads CPU / storage / battery / network stats. CPU and network values are deltas since the last sample.
+/// Reads CPU / memory / storage / battery / network stats. CPU and network values are deltas since the last sample.
 final class SystemSampler {
     struct Stats {
         var cpuUser = 0.0, cpuSystem = 0.0, cpuIdle = 0.0
+        var memoryApp: Int64 = 0, memoryWired: Int64 = 0, memoryCompressed: Int64 = 0, memoryTotal: Int64 = 0
+        var memoryPressure = Double.nan
+        var memoryUsedFraction: Double {
+            memoryTotal > 0 ? Double(memoryApp + memoryWired + memoryCompressed) / Double(memoryTotal) : 0
+        }
         var storageUsed: Int64 = 0, storageTotal: Int64 = 0
         var storageUsedFraction: Double { storageTotal > 0 ? Double(storageUsed) / Double(storageTotal) : 0 }
         var batteryLevel: Int?, batteryHealth: Double?, batteryCycles: Int?
@@ -210,6 +313,7 @@ final class SystemSampler {
     func sample() -> Stats {
         var stats = Stats()
         sampleCPU(into: &stats)
+        sampleMemory(into: &stats)
         sampleStorage(into: &stats)
         sampleBattery(into: &stats)
         sampleNetwork(into: &stats)
@@ -235,6 +339,29 @@ final class SystemSampler {
         stats.cpuUser = (delta[0] + delta[3]) / total * 100
         stats.cpuSystem = delta[1] / total * 100
         stats.cpuIdle = delta[2] / total * 100
+    }
+
+    /// Same breakdown as Activity Monitor: used = app + wired + compressed.
+    private func sampleMemory(into stats: inout Stats) {
+        var info = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.stride / MemoryLayout<integer_t>.stride)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return }
+        let page = Int64(vm_kernel_page_size)
+        stats.memoryApp = max(Int64(info.internal_page_count) - Int64(info.purgeable_count), 0) * page
+        stats.memoryWired = Int64(info.wire_count) * page
+        stats.memoryCompressed = Int64(info.compressor_page_count) * page
+        stats.memoryTotal = Int64(ProcessInfo.processInfo.physicalMemory)
+
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        if sysctlbyname("kern.memorystatus_level", &level, &size, nil, 0) == 0 {
+            stats.memoryPressure = Double(100 - level)
+        }
     }
 
     private func sampleStorage(into stats: inout Stats) {
@@ -310,7 +437,7 @@ final class SystemSampler {
 
 #Preview {
     SystemView()
-        .frame(width: 616, height: 136)
+        .frame(width: 616, height: 306)
         .padding()
         .background(.black)
         .preferredColorScheme(.dark)

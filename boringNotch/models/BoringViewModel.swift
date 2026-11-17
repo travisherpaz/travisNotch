@@ -221,6 +221,7 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     private static func openSize(view: NotchViews, noteCount: Int) -> CGSize {
+        if view == .system { return CGSize(width: openNotchSize.width, height: systemNotchHeight) }
         guard view == .notes else { return openNotchSize }
         let rows: CGFloat = noteCount > 2 ? 2 : 1
         return CGSize(width: openNotchSize.width, height: notesChromeHeight + notesRowHeight * rows + 8 * (rows - 1))
