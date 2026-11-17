@@ -191,9 +191,12 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
 
     // MARK: - System tab (temperature / fans)
 
-    @objc func systemStats(with reply: @escaping (NSNumber?, [NSNumber]) -> Void) {
-        guard let smc = SMC() else { reply(nil, []); return }
-        reply(smc.ssdTemperature().map { NSNumber(value: $0) }, smc.fanSpeeds().map { NSNumber(value: $0) })
+    @objc func systemStats(with reply: @escaping (NSNumber?, NSNumber?, [NSNumber]) -> Void) {
+        guard let smc = SMC() else { reply(nil, nil, []); return }
+        // TH0x: internal SSD (matched NVMe SMART on M4 Pro). TB0T: battery.
+        reply(smc.temperature("TH0x").map { NSNumber(value: $0) },
+              smc.temperature("TB0T").map { NSNumber(value: $0) },
+              smc.fanSpeeds().map { NSNumber(value: $0) })
     }
 
     /// Replies nil on success, otherwise an error message.

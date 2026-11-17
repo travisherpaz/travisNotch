@@ -2,7 +2,7 @@
 //  SMC.swift
 //  BoringNotchXPCHelper
 //
-//  Minimal AppleSMC client: SSD temperature, fan speeds, and fan presets.
+//  Minimal AppleSMC client: temperatures, fan speeds, and fan presets.
 //  Reading works unprivileged; writing fan keys needs root (see FanControl).
 //
 
@@ -102,9 +102,8 @@ final class SMC {
 
     // MARK: - Readings
 
-    /// Internal SSD (NAND). On M4 Pro this matched the drive's own NVMe SMART temperature.
-    func ssdTemperature() -> Double? {
-        read("TH0x").flatMap { (10...130).contains($0) ? $0 : nil }
+    func temperature(_ key: String) -> Double? {
+        read(key).flatMap { (10...130).contains($0) ? $0 : nil }
     }
 
     var fanCount: Int { Int(read("FNum") ?? 0) }
