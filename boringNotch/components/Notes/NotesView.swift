@@ -3,6 +3,7 @@
 //  boringNotch
 //
 
+import Carbon.HIToolbox
 import Defaults
 import SwiftUI
 
@@ -145,11 +146,16 @@ private final class NoteTextView: NSTextView {
               event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
             return super.performKeyEquivalent(with: event)
         }
-        switch event.charactersIgnoringModifiers {
-        case "b": toggleBold(); return true
-        case "u": underline(nil); return true
-        default: return super.performKeyEquivalent(with: event)
+        // Non-Latin input (e.g. 2-Set Korean) sends ⌘B as "ㅠ" and ⌘U as "ㅕ", so fall back to the key
+        // position there. ASCII layouts (incl. Dvorak) keep matching by character.
+        let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        let isASCII = chars.unicodeScalars.allSatisfy(\.isASCII)
+        func matches(_ char: String, _ keyCode: Int) -> Bool {
+            isASCII ? chars == char : Int(event.keyCode) == keyCode
         }
+        if matches("b", kVK_ANSI_B) { toggleBold(); return true }
+        if matches("u", kVK_ANSI_U) { underline(nil); return true }
+        return super.performKeyEquivalent(with: event)
     }
 
     private func toggleBold() {
