@@ -25,7 +25,7 @@ struct SystemView: View {
     @State private var applying: String?
     @State private var error: String?
 
-    private let presets = [("auto", "Auto"), ("3500", "3500"), ("max", "Max")]
+    private let presets = [("auto", "Auto"), ("3500", "3500"), ("4500", "4500"), ("max", "Max")]
 
     var body: some View {
         Grid(horizontalSpacing: 6, verticalSpacing: 6) {

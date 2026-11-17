@@ -115,7 +115,7 @@ final class SMC {
 
 /// Fan presets, run as root by the installed setuid copy of this helper: `boringnotch-fan fan <preset>`.
 enum FanControl {
-    static let presets = ["auto", "3500", "max"]
+    static let presets = ["auto", "3500", "4500", "max"]
     static let installedToolPath = "/usr/local/libexec/boringnotch-fan"
 
     static func apply(_ preset: String) -> Int32 {
@@ -140,7 +140,7 @@ enum FanControl {
             guard manual else { return 4 }
             let minRPM = smc.read("F\(fan)Mn") ?? 0
             let maxRPM = smc.read("F\(fan)Mx") ?? 0
-            let target = preset == "max" ? maxRPM : min(max(3500, minRPM), maxRPM)
+            let target = preset == "max" ? maxRPM : min(max(Double(preset) ?? minRPM, minRPM), maxRPM)
             guard smc.write("F\(fan)Tg", target) else { return 5 }
         }
         return 0
