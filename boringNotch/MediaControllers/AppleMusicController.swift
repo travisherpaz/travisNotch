@@ -29,6 +29,7 @@ class AppleMusicController: MediaControllerProtocol {
     }
 
     private var notificationTask: Task<Void, Never>?
+    private var artworkRetryTask: Task<Void, Never>?
     
     // MARK: - Initialization
     init() {
@@ -53,6 +54,7 @@ class AppleMusicController: MediaControllerProtocol {
     }
     
     deinit {
+        artworkRetryTask?.cancel()
         notificationTask?.cancel()
     }
     
@@ -144,11 +146,30 @@ class AppleMusicController: MediaControllerProtocol {
         updatedState.repeatMode = RepeatMode(rawValue: Int(repeatModeValue)) ?? .off
         let volumePercentage = descriptor.atIndex(9)?.int32Value ?? 50
         updatedState.volume = Double(volumePercentage) / 100.0
-        updatedState.artwork = descriptor.atIndex(10)?.data as Data?
+        // The script returns "" when there's no artwork yet: that's empty Data, not nil, and would
+        // otherwise count as "new artwork" that can't be decoded, leaving the previous cover up.
+        let artwork = descriptor.atIndex(10)?.data
+        updatedState.artwork = artwork?.isEmpty == false ? artwork : nil
         let lovedState = descriptor.atIndex(11)?.booleanValue ?? false
         updatedState.isFavorite = lovedState
         updatedState.lastUpdated = Date()
         self.playbackState = updatedState
+        retryArtworkIfMissing()
+    }
+
+    /// Music often posts playerInfo before a streamed track's artwork is loaded and won't post again
+    /// for it, so ask a few more times. Ends as soon as artwork shows up.
+    private func retryArtworkIfMissing() {
+        guard playbackState.artwork == nil, playbackState.title != "Not Playing", artworkRetryTask == nil else { return }
+        artworkRetryTask = Task { [weak self] in
+            for seconds in [1, 2, 4] {
+                try? await Task.sleep(for: .seconds(seconds))
+                guard let self, !Task.isCancelled else { return }
+                await self.updatePlaybackInfo()
+                if self.playbackState.artwork != nil { break }
+            }
+            self?.artworkRetryTask = nil
+        }
     }
     
     // MARK: - Private Methods
