@@ -60,12 +60,11 @@ struct SystemView: View {
     // Form per job: single value vs a limit → hero number + meter; value over time → hero + line;
     // one whole split into parts → segmented bar + legend. Status colors always ship with a label.
 
-    /// SSD temperature against its throttle point, plus fans.
+    /// SSD temperature (colored by its throttle point), plus fans.
     private var thermalCard: some View {
         let status = ssd.map { Status($0, warn: 60, critical: 70, labels: ("Normal", "Warm", "Hot")) } // SSDs throttle ~70°C
         return card("thermometer.medium", "SSD", status: status) {
-            hero(ssd.map { String(format: "%.1f°C", $0) } ?? "--")
-            Meter(fraction: ((ssd ?? 20) - 20) / 60, color: status?.color ?? .gray) // 20–80°C scale
+            hero(ssd.map { String(format: "%.1f°C", $0) } ?? "--", color: status?.color ?? .primary)
             ForEach(fans.indices, id: \.self) { detail("Fan \($0 + 1)", "\(Int(fans[$0])) rpm") }
             HStack(spacing: 4) {
                 ForEach(presets, id: \.0) { id, title in
@@ -184,11 +183,12 @@ struct SystemView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
     }
 
-    private func hero(_ value: String, sub: String? = nil) -> some View {
+    private func hero(_ value: String, sub: String? = nil, color: Color = .primary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(value)
                 .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .monospacedDigit()
+                .foregroundStyle(color)
             if let sub {
                 Text(sub)
                     .font(.system(size: 10))
