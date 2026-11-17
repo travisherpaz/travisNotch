@@ -123,6 +123,11 @@ final class SMC {
         return Self.cpuKeys?.compactMap { read($0) }.filter { (10...130).contains($0) && $0 != 40 }.max()
     }
 
+    /// Internal SSD (NAND). On M4 Pro this matched the drive's own NVMe SMART temperature.
+    func ssdTemperature() -> Double? {
+        read("TH0x").flatMap { (10...130).contains($0) ? $0 : nil }
+    }
+
     var fanCount: Int { Int(read("FNum") ?? 0) }
 
     func fanSpeeds() -> [Double] {

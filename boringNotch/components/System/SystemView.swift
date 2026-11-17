@@ -10,6 +10,7 @@ struct SystemView: View {
     @MainActor static var fanPreset = "auto"
 
     @State private var cpu: Double?
+    @State private var ssd: Double?
     @State private var fans: [Double] = []
     @State private var preset = SystemView.fanPreset
     @State private var applying: String?
@@ -23,10 +24,16 @@ struct SystemView: View {
                 Text("CPU")
                     .font(.system(size: 12))
                     .foregroundStyle(.gray)
-                Text(cpu.map { String(format: "%.0f°C", $0) } ?? "--")
+                Text(Self.format(cpu))
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(temperatureColor)
+                if ssd != nil {
+                    Text("SSD \(Self.format(ssd))")
+                        .font(.system(size: 12))
+                        .monospacedDigit()
+                        .foregroundStyle(.gray)
+                }
             }
             .frame(width: 180)
             .frame(maxHeight: .infinity)
@@ -78,10 +85,15 @@ struct SystemView: View {
             while !Task.isCancelled {
                 let stats = await XPCHelperClient.shared.systemStats()
                 cpu = stats.cpu
+                ssd = stats.ssd
                 fans = stats.fans
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+    }
+
+    private static func format(_ celsius: Double?) -> String {
+        celsius.map { String(format: "%.1f°C", $0) } ?? "--"
     }
 
     private var card: some View {
