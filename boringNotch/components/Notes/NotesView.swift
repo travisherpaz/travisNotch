@@ -155,15 +155,23 @@ private struct TodoListView: View {
                 TextField("New item", text: item.title)
                     .textFieldStyle(.plain)
                     .focused($focused, equals: item.wrappedValue.id)
+                    .onSubmit {
+                        // Enter starts the next item right below; on an empty item it does nothing.
+                        guard !item.wrappedValue.title.isEmpty else { return }
+                        add(after: item.wrappedValue.id)
+                    }
             }
         }
         .font(.system(size: 12))
         .opacity(done ? 0.45 : 1)
     }
 
-    private func add() {
+    private func add() { add(after: nil) }
+
+    private func add(after id: UUID?) {
         let item = TodoItem()
-        withAnimation(.smooth) { todos.append(item) }
+        let index = id.flatMap { id in todos.firstIndex { $0.id == id } }.map { $0 + 1 } ?? todos.count
+        withAnimation(.smooth) { todos.insert(item, at: index) }
         // The notch panel only turns key when a text view is clicked; make it key so typing lands in the new row.
         NSApp.windows.first { $0 is BoringNotchSkyLightWindow && $0.frame.contains(NSEvent.mouseLocation) }?.makeKey()
         DispatchQueue.main.async { focused = item.id }
