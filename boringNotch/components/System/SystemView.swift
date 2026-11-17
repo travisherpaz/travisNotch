@@ -9,7 +9,6 @@ struct SystemView: View {
     /// Preset applied this session. The app resets fans to "auto" on quit when it isn't.
     @MainActor static var fanPreset = "auto"
 
-    @State private var cpu: Double?
     @State private var ssd: Double?
     @State private var fans: [Double] = []
     @State private var preset = SystemView.fanPreset
@@ -21,19 +20,13 @@ struct SystemView: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(spacing: 2) {
-                Text("CPU")
+                Text("SSD")
                     .font(.system(size: 12))
                     .foregroundStyle(.gray)
-                Text(Self.format(cpu))
+                Text(ssd.map { String(format: "%.1f°C", $0) } ?? "--")
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(temperatureColor)
-                if ssd != nil {
-                    Text("SSD \(Self.format(ssd))")
-                        .font(.system(size: 12))
-                        .monospacedDigit()
-                        .foregroundStyle(.gray)
-                }
             }
             .frame(width: 180)
             .frame(maxHeight: .infinity)
@@ -84,7 +77,6 @@ struct SystemView: View {
         .task {
             while !Task.isCancelled {
                 let stats = await XPCHelperClient.shared.systemStats()
-                cpu = stats.cpu
                 ssd = stats.ssd
                 fans = stats.fans
                 try? await Task.sleep(for: .seconds(2))
@@ -92,17 +84,14 @@ struct SystemView: View {
         }
     }
 
-    private static func format(_ celsius: Double?) -> String {
-        celsius.map { String(format: "%.1f°C", $0) } ?? "--"
-    }
-
     private var card: some View {
         RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08))
     }
 
     private var temperatureColor: Color {
-        guard let cpu else { return .white }
-        return cpu < 70 ? .white : cpu < 90 ? .orange : .red
+        // SSDs typically start throttling around 70°C.
+        guard let ssd else { return .white }
+        return ssd < 60 ? .white : ssd < 70 ? .orange : .red
     }
 
     private func apply(_ id: String) async {

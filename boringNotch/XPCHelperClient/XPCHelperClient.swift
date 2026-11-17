@@ -244,16 +244,16 @@ final class XPCHelperClient: NSObject {
 
     // MARK: - System tab
 
-    nonisolated func systemStats() async -> (cpu: Double?, ssd: Double?, fans: [Double]) {
+    nonisolated func systemStats() async -> (ssd: Double?, fans: [Double]) {
         do {
             let service = await MainActor.run { ensureRemoteService() }
             return try await service.withContinuation { service, continuation in
-                service.systemStats { cpu, ssd, fans in
-                    continuation.resume(returning: (cpu?.doubleValue, ssd?.doubleValue, fans.map(\.doubleValue)))
+                service.systemStats { ssd, fans in
+                    continuation.resume(returning: (ssd?.doubleValue, fans.map(\.doubleValue)))
                 }
             }
         } catch {
-            return (nil, nil, [])
+            return (nil, [])
         }
     }
 

@@ -20,8 +20,8 @@ import Foundation
     func isScreenBrightnessAvailable(with reply: @escaping (Bool) -> Void)
     func currentScreenBrightness(with reply: @escaping (NSNumber?) -> Void)
     func setScreenBrightness(_ value: Float, with reply: @escaping (Bool) -> Void)
-    // System tab: CPU and SSD temperature (°C) + fan RPMs, and fan presets ("auto", "3500", "max")
-    func systemStats(with reply: @escaping (NSNumber?, NSNumber?, [NSNumber]) -> Void)
+    // System tab: SSD temperature (°C) + fan RPMs, and fan presets ("auto", "3500", "max")
+    func systemStats(with reply: @escaping (NSNumber?, [NSNumber]) -> Void)
     func setFanPreset(_ preset: String, with reply: @escaping (String?) -> Void)
 }
 

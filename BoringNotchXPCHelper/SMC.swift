@@ -2,7 +2,7 @@
 //  SMC.swift
 //  BoringNotchXPCHelper
 //
-//  Minimal AppleSMC client: CPU temperature, fan speeds, and fan presets.
+//  Minimal AppleSMC client: SSD temperature, fan speeds, and fan presets.
 //  Reading works unprivileged; writing fan keys needs root (see FanControl).
 //
 
@@ -29,7 +29,7 @@ private struct SMCKeyData {
 }
 
 final class SMC {
-    private enum Command: UInt8 { case readBytes = 5, writeBytes = 6, keyAtIndex = 8, keyInfo = 9 }
+    private enum Command: UInt8 { case readBytes = 5, writeBytes = 6, keyInfo = 9 }
     private var connection: io_connect_t = 0
 
     init?() {
@@ -100,28 +100,7 @@ final class SMC {
         return call(input) != nil
     }
 
-    private func key(at index: Int) -> String? {
-        var input = SMCKeyData()
-        input.data8 = Command.keyAtIndex.rawValue
-        input.data32 = UInt32(index)
-        return call(input).map { Self.name($0.key) }
-    }
-
     // MARK: - Readings
-
-    /// "Tp*" keys are CPU die sensors on Apple Silicon. Scanning ~3k keys is slow, so do it once.
-    private static var cpuKeys: [String]?
-
-    /// Hottest CPU sensor — the first number to move under load.
-    // ponytail: max over "Tp*" keys, skipping ones stuck at exactly 40.0 (placeholders on M4 Pro that
-    // would floor the reading at 40). Swap for a per-chip key list if a model reports bogus values.
-    func cpuTemperature() -> Double? {
-        if Self.cpuKeys == nil {
-            let count = Int(read("#KEY") ?? 0)
-            Self.cpuKeys = (0..<count).compactMap { key(at: $0) }.filter { $0.hasPrefix("Tp") }
-        }
-        return Self.cpuKeys?.compactMap { read($0) }.filter { (10...130).contains($0) && $0 != 40 }.max()
-    }
 
     /// Internal SSD (NAND). On M4 Pro this matched the drive's own NVMe SMART temperature.
     func ssdTemperature() -> Double? {
