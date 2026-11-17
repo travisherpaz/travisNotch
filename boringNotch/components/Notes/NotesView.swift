@@ -230,13 +230,20 @@ private struct RichNoteEditor: NSViewRepresentable {
 
         init(_ parent: RichNoteEditor) { self.parent = parent }
 
-        /// Pasted rich text brings its own colors (often black, invisible on the dark card) and
-        /// highlights: force white text, drop backgrounds. Bold/underline stay. Also fixes old notes on load.
+        /// Pasted rich text brings its own colors (often black, invisible on the dark card), highlights and
+        /// sizes: force white 12pt text, drop backgrounds. Bold/underline and the font family stay.
+        /// Also fixes old notes on load.
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
                          range editedRange: NSRange, changeInLength delta: Int) {
             guard editedMask.contains(.editedCharacters), editedRange.length > 0 else { return }
             textStorage.addAttribute(.foregroundColor, value: NSColor.white, range: editedRange)
             textStorage.removeAttribute(.backgroundColor, range: editedRange)
+            textStorage.enumerateAttribute(.font, in: editedRange) { value, range, _ in
+                let font = value as? NSFont ?? .systemFont(ofSize: 12)
+                if font.pointSize != 12 {
+                    textStorage.addAttribute(.font, value: NSFontManager.shared.convert(font, toSize: 12), range: range)
+                }
+            }
         }
 
         func textDidChange(_ notification: Notification) {
