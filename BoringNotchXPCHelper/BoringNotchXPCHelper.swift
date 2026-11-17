@@ -101,18 +101,27 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
     // MARK: - Screen Brightness (moved from client app into helper)
 
+    /// Like the system brightness keys: the built-in panel when there is one, else the main display.
+    /// (With an external monitor as main display, the main display usually can't be dimmed.)
+    private static var brightnessDisplay: CGDirectDisplayID {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(UInt32(ids.count), &ids, &count)
+        return ids.prefix(Int(count)).first { CGDisplayIsBuiltin($0) != 0 } ?? CGMainDisplayID()
+    }
+
     @objc func isScreenBrightnessAvailable(with reply: @escaping (Bool) -> Void) {
         var b: Float = 0
-        reply(displayServicesGetBrightness(displayID: CGMainDisplayID(), out: &b) || ioServiceFor(displayID: CGMainDisplayID()) != nil)
+        reply(displayServicesGetBrightness(displayID: Self.brightnessDisplay, out: &b) || ioServiceFor(displayID: Self.brightnessDisplay) != nil)
     }
 
     @objc func currentScreenBrightness(with reply: @escaping (NSNumber?) -> Void) {
         var b: Float = 0
-        if displayServicesGetBrightness(displayID: CGMainDisplayID(), out: &b) {
+        if displayServicesGetBrightness(displayID: Self.brightnessDisplay, out: &b) {
             reply(NSNumber(value: b))
             return
         }
-        if let io = ioServiceFor(displayID: CGMainDisplayID()) {
+        if let io = ioServiceFor(displayID: Self.brightnessDisplay) {
             var level: Float = 0
             if IODisplayGetFloatParameter(io, 0, kIODisplayBrightnessKey as CFString, &level) == kIOReturnSuccess {
                 IOObjectRelease(io)
@@ -126,11 +135,11 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
 
     @objc func setScreenBrightness(_ value: Float, with reply: @escaping (Bool) -> Void) {
         let clamped = max(0, min(1, value))
-        if displayServicesSetBrightness(displayID: CGMainDisplayID(), value: clamped) {
+        if displayServicesSetBrightness(displayID: Self.brightnessDisplay, value: clamped) {
             reply(true)
             return
         }
-        if let io = ioServiceFor(displayID: CGMainDisplayID()) {
+        if let io = ioServiceFor(displayID: Self.brightnessDisplay) {
             let ok = IODisplaySetFloatParameter(io, 0, kIODisplayBrightnessKey as CFString, clamped) == kIOReturnSuccess
             IOObjectRelease(io)
             reply(ok)
