@@ -61,6 +61,8 @@ class BoringNotchSkyLightWindow: NSPanel {
         level = .mainMenu + 3
         hasShadow = false
         isReleasedWhenClosed = false
+        // Only take key focus when a text view needs it (Notes tab), so other clicks keep the frontmost app focused.
+        becomesKeyOnlyIfNeeded = true
         
         // Force dark appearance regardless of system setting
         appearance = NSAppearance(named: .darkAqua)
@@ -109,6 +111,6 @@ class BoringNotchSkyLightWindow: NSPanel {
     
     private var observers: Set<AnyCancellable> = []
     
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

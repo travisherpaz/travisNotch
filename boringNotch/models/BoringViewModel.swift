@@ -209,6 +209,12 @@ class BoringViewModel: NSObject, ObservableObject {
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
 
+        // The Notes editor can leave the notch panel holding keyboard focus; give it back to the app the user was in.
+        if NSApp.keyWindow is BoringNotchSkyLightWindow,
+           let front = NSWorkspace.shared.frontmostApplication, front != .current {
+            front.activate()
+        }
+
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
         // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
     if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
