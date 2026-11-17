@@ -7,6 +7,8 @@ import Carbon.HIToolbox
 import Defaults
 import SwiftUI
 
+/// Card 0 of the grid is the to-do list; notes[0] is kept only as its slot so the
+/// grid/notch sizing keeps counting cards through `notes.count`.
 struct NotesView: View {
     @Default(.notes) private var notes
     private let maxNotes = 4
@@ -42,7 +44,18 @@ struct NotesView: View {
         .padding(.top, 4)
     }
 
+    @ViewBuilder
     private func noteCard(_ index: Int) -> some View {
+        if index == 0 {
+            TodoListView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+        } else {
+            textNoteCard(index)
+        }
+    }
+
+    private func textNoteCard(_ index: Int) -> some View {
         // Bounds-checked binding: the editor can read its binding after a removal, before ForEach rebuilds.
         let rtf = Binding(
             get: { index < notes.count ? notes[index] : Data() },
@@ -61,7 +74,7 @@ struct NotesView: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if notes.count > 1 {
+                if index > 0 { // the to-do card stays
                     Button {
                         withAnimation(.smooth) { _ = notes.remove(at: index) }
                     } label: {
@@ -74,6 +87,86 @@ struct NotesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+    }
+}
+
+struct TodoItem: Codable, Hashable, Identifiable, Defaults.Serializable {
+    var id = UUID()
+    var title = ""
+    var done = false
+}
+
+/// [ ] toggles done (dimmed + struck through); done items get a trash button to remove them one by one.
+private struct TodoListView: View {
+    @Default(.todos) private var todos
+    @FocusState private var focused: UUID?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("To-do")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.gray)
+                Spacer()
+                Button(action: add) {
+                    Image(systemName: "plus")
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.gray)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach($todos) { $item in
+                        row($item)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.never)
+        }
+        .padding(10)
+    }
+
+    private func row(_ item: Binding<TodoItem>) -> some View {
+        let done = item.wrappedValue.done
+        return HStack(spacing: 6) {
+            Button {
+                withAnimation(.smooth) { item.wrappedValue.done.toggle() }
+            } label: {
+                Image(systemName: done ? "checkmark.square.fill" : "square")
+            }
+            .buttonStyle(.plain)
+
+            if done {
+                Text(item.wrappedValue.title)
+                    .strikethrough()
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button {
+                    withAnimation(.smooth) { todos.removeAll { $0.id == item.wrappedValue.id } }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.gray)
+            } else {
+                TextField("New item", text: item.title)
+                    .textFieldStyle(.plain)
+                    .focused($focused, equals: item.wrappedValue.id)
+            }
+        }
+        .font(.system(size: 12))
+        .opacity(done ? 0.45 : 1)
+    }
+
+    private func add() {
+        let item = TodoItem()
+        withAnimation(.smooth) { todos.append(item) }
+        // The notch panel only turns key when a text view is clicked; make it key so typing lands in the new row.
+        NSApp.windows.first { $0 is BoringNotchSkyLightWindow && $0.frame.contains(NSEvent.mouseLocation) }?.makeKey()
+        DispatchQueue.main.async { focused = item.id }
     }
 }
 

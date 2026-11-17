@@ -175,6 +175,7 @@ extension Defaults.Keys {
     // MARK: Notes
     // RTF per note (bold/underline); empty Data = empty note.
     static let notes = Key<[Data]>("notesRTF", default: [Data(), Data()])
+    static let todos = Key<[TodoItem]>("todos", default: [])
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)
