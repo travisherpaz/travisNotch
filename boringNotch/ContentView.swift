@@ -119,7 +119,6 @@ struct ContentView: View {
                 
                 mainLayout
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
-                    .offset(x: -musicLiveActivityLeftShift)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -288,7 +287,7 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
-                      } else if showsMusicLiveActivity {
+                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
@@ -388,24 +387,6 @@ struct ContentView: View {
         )
     }
 
-    private var showsMusicLiveActivity: Bool {
-        (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
-    }
-
-    private var isInlineMusicSneakPeek: Bool {
-        coordinator.expandingView.show && coordinator.expandingView.type == .music && Defaults[.sneakPeekStyles] == .inline
-    }
-
-    // Album art and visualizer both sit left of the hardware notch, so the live activity doesn't
-    // cover menu bar icons on the right. Shift the closed notch left by the visualizer width + spacing.
-    private var musicLiveActivityLeftShift: CGFloat {
-        let batteryShown = coordinator.expandingView.type == .battery && coordinator.expandingView.show && Defaults[.showPowerStatusNotifications]
-        let inlineHUDShown = coordinator.sneakPeek.show && Defaults[.inlineHUD] && coordinator.sneakPeek.type != .music && coordinator.sneakPeek.type != .battery
-        guard showsMusicLiveActivity, !batteryShown, !inlineHUDShown, !isInlineMusicSneakPeek,
-              !coordinator.helloAnimationRunning else { return 0 }
-        return max(0, vm.effectiveClosedNotchHeight - 12) + 8
-    }
-
     @ViewBuilder
     func MusicLiveActivity() -> some View {
         HStack {
@@ -421,10 +402,6 @@ struct ContentView: View {
                     width: max(0, vm.effectiveClosedNotchHeight - 12),
                     height: max(0, vm.effectiveClosedNotchHeight - 12)
                 )
-
-            if !isInlineMusicSneakPeek {
-                musicVisualizer
-            }
 
             Rectangle()
                 .fill(.black)
@@ -473,46 +450,40 @@ struct ContentView: View {
                             + -cornerRadiusInsets.closed.top
                 )
 
-            if isInlineMusicSneakPeek {
-                musicVisualizer
+            HStack {
+                if useMusicVisualizer {
+                    Rectangle()
+                        .fill(
+                            Defaults[.coloredSpectrogram]
+                                ? Color(nsColor: musicManager.avgColor).gradient
+                                : Color.gray.gradient
+                        )
+                        .frame(width: 50, alignment: .center)
+                        .matchedGeometryEffect(id: "spectrum", in: albumArtNamespace)
+                        .mask {
+                            AudioSpectrumView(isPlaying: $musicManager.isPlaying)
+                                .frame(width: 16, height: 12)
+                        }
+                } else {
+                    LottieAnimationContainer()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
+            .frame(
+                width: max(
+                    0,
+                    vm.effectiveClosedNotchHeight - 12
+                        + gestureProgress / 2
+                ),
+                height: max(
+                    0,
+                    vm.effectiveClosedNotchHeight - 12
+                ),
+                alignment: .center
+            )
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,
-            alignment: .center
-        )
-    }
-
-    private var musicVisualizer: some View {
-        HStack {
-            if useMusicVisualizer {
-                Rectangle()
-                    .fill(
-                        Defaults[.coloredSpectrogram]
-                            ? Color(nsColor: musicManager.avgColor).gradient
-                            : Color.gray.gradient
-                    )
-                    .frame(width: 50, alignment: .center)
-                    .matchedGeometryEffect(id: "spectrum", in: albumArtNamespace)
-                    .mask {
-                        AudioSpectrumView(isPlaying: $musicManager.isPlaying)
-                            .frame(width: 16, height: 12)
-                    }
-            } else {
-                LottieAnimationContainer()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(
-            width: max(
-                0,
-                vm.effectiveClosedNotchHeight - 12
-                    + gestureProgress / 2
-            ),
-            height: max(
-                0,
-                vm.effectiveClosedNotchHeight - 12
-            ),
             alignment: .center
         )
     }
