@@ -1162,6 +1162,14 @@ struct Shelf: View {
 //}
 
 struct Appearance: View {
+    @Default(.tabOrder) var tabOrder
+
+    private func moveTab(at index: Int, by offset: Int) {
+        var order = completeTabOrder(tabOrder)
+        order.swapAt(index, index + offset)
+        tabOrder = order
+    }
+
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Default(.mirrorShape) var mirrorShape
     @Default(.sliderColor) var sliderColor
@@ -1185,6 +1193,38 @@ struct Appearance: View {
 
             } header: {
                 Text("General")
+            }
+
+            Section {
+                let order = completeTabOrder(tabOrder)
+                ForEach(Array(order.enumerated()), id: \.element) { index, view in
+                    if let tab = allTabs.first(where: { $0.view == view }) {
+                        HStack {
+                            Image(systemName: tab.icon)
+                                .frame(width: 20)
+                            Text(tab.label)
+                            Spacer()
+                            Text(index < leadingTabCount ? "Left of notch" : "Right of notch")
+                                .foregroundStyle(.secondary)
+                            Button {
+                                moveTab(at: index, by: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .disabled(index == 0)
+                            Button {
+                                moveTab(at: index, by: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .disabled(index == order.count - 1)
+                        }
+                    }
+                }
+            } header: {
+                Text("Tabs")
+            } footer: {
+                Text("The first \(leadingTabCount) tabs sit left of the notch, the rest on the right. A hidden Shelf tab is skipped.")
             }
 
             Section {

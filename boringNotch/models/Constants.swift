@@ -176,6 +176,9 @@ extension Defaults.Keys {
     // RTF per note (bold/underline); empty Data = empty note.
     static let notes = Key<[Data]>("notesRTF", default: [Data(), Data()])
     static let todos = Key<[TodoItem]>("todos", default: [])
+
+    // MARK: Tabs
+    static let tabOrder = Key<[NotchViews]>("tabOrder", default: [.home, .shelf, .notes, .system, .awake])
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)
