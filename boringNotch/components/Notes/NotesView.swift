@@ -65,7 +65,7 @@ struct NotesView: View {
             .padding(6)
             .overlay(alignment: .topLeading) {
                 if rtf.wrappedValue.isEmpty {
-                    Text("Note \(index + 1)")
+                    Text("Note \(index)") // index 0 is the to-do card
                         .font(.system(size: 12))
                         .foregroundStyle(.gray)
                         .padding(.horizontal, 11)
