@@ -189,7 +189,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         }()
     }
 
-    // MARK: - System tab (temperature / fans)
+    // MARK: - System tab (temperature / fans) and Awake tab
 
     @objc func systemStats(with reply: @escaping (NSNumber?, NSNumber?, [NSNumber]) -> Void) {
         guard let smc = SMC() else { reply(nil, nil, []); return }
@@ -203,18 +203,27 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     @objc func setFanPreset(_ preset: String, with reply: @escaping (String?) -> Void) {
         guard FanControl.presets.contains(preset) else { reply("Unknown fan preset"); return }
         DispatchQueue.global(qos: .userInitiated).async {
-            if let error = Self.installFanToolIfNeeded() { reply(error); return }
-            let (status, output) = Self.run(FanControl.installedToolPath, ["fan", preset])
+            if let error = Self.installRootToolIfNeeded() { reply(error); return }
+            let (status, output) = Self.run(RootTool.path, ["fan", preset])
             reply(status == 0 ? nil : "Fan control failed (code \(status)) \(output)")
         }
     }
 
-    /// Writing fan keys needs root: install a setuid-root copy of this helper outside the app bundle
-    /// (rebuilds would replace an in-bundle copy). Asks for the admin password on first use and
+    /// Lid-closed awake: `pmset disablesleep` (root). Replies nil on success, otherwise an error message.
+    @objc func setSleepDisabled(_ disabled: Bool, with reply: @escaping (String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let error = Self.installRootToolIfNeeded() { reply(error); return }
+            let (status, output) = Self.run(RootTool.path, ["sleep", disabled ? "disable" : "enable"])
+            reply(status == 0 ? nil : "Sleep setting failed (code \(status)) \(output)")
+        }
+    }
+
+    /// Fans and lid-closed sleep need root: install a setuid-root copy of this helper outside the app
+    /// bundle (rebuilds would replace an in-bundle copy). Asks for the admin password on first use and
     /// again whenever the helper binary changes.
-    private static func installFanToolIfNeeded() -> String? {
+    private static func installRootToolIfNeeded() -> String? {
         guard let source = Bundle.main.executablePath else { return "Helper executable not found" }
-        let target = FanControl.installedToolPath
+        let target = RootTool.path
         let fm = FileManager.default
         if let attributes = try? fm.attributesOfItem(atPath: target),
            (attributes[.ownerAccountID] as? NSNumber)?.intValue == 0,
@@ -223,7 +232,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             return nil
         }
         let escaped = source.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "do shell script \"/bin/mkdir -p /usr/local/libexec && /usr/bin/install -o root -g wheel -m 4755 \" & quoted form of \"\(escaped)\" & \" \(target)\" with prompt \"Boring Notch needs to install a helper to control fan speed.\" with administrator privileges"
+        let script = "do shell script \"/bin/mkdir -p /usr/local/libexec && /bin/rm -f \(RootTool.legacyPath) && /usr/bin/install -o root -g wheel -m 4755 \" & quoted form of \"\(escaped)\" & \" \(target)\" with prompt \"Boring Notch needs to install a helper to control fan speed and sleep.\" with administrator privileges"
         let (status, output) = run("/usr/bin/osascript", ["-e", script])
         return status == 0 ? nil : (output.isEmpty ? "Helper install failed" : output)
     }

@@ -23,5 +23,7 @@ import Foundation
     // System tab: SSD and battery temperature (°C) + fan RPMs, and fan presets ("auto", "3500", "4500", "max")
     func systemStats(with reply: @escaping (NSNumber?, NSNumber?, [NSNumber]) -> Void)
     func setFanPreset(_ preset: String, with reply: @escaping (String?) -> Void)
+    // Awake tab: keep the Mac awake with the lid closed (`pmset disablesleep`)
+    func setSleepDisabled(_ disabled: Bool, with reply: @escaping (String?) -> Void)
 }
 

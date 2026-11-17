@@ -86,6 +86,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if SystemView.fanPreset != "auto" {
             XPCHelperClient.shared.resetFansToAutoSync()
         }
+        // `disablesleep` is system-wide and survives the app; undo it. (The display assertion dies with us.)
+        if AwakeController.shared.mode == .lidClosed {
+            XPCHelperClient.shared.restoreSleepSync()
+        }
         cleanupDragDetectors()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()

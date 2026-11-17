@@ -29,6 +29,7 @@ public enum NotchViews {
     case shelf
     case notes
     case system
+    case awake
 }
 
 enum SettingsEnum {

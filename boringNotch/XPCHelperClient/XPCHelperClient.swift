@@ -271,14 +271,37 @@ final class XPCHelperClient: NSObject {
         }
     }
 
+    /// Returns nil on success, otherwise an error message.
+    nonisolated func setSleepDisabled(_ disabled: Bool) async -> String? {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.setSleepDisabled(disabled) { error in
+                    continuation.resume(returning: error)
+                }
+            }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     /// For app termination: the async path hops to the main actor, which is busy terminating.
     nonisolated func resetFansToAutoSync() {
+        syncProxy { $0.setFanPreset("auto") { _ in } }
+    }
+
+    nonisolated func restoreSleepSync() {
+        syncProxy { $0.setSleepDisabled(false) { _ in } }
+    }
+
+    private nonisolated func syncProxy(_ body: (BoringNotchXPCHelperProtocol) -> Void) {
         let conn = NSXPCConnection(serviceName: serviceName)
         conn.remoteObjectInterface = NSXPCInterface(with: BoringNotchXPCHelperProtocol.self)
         conn.resume()
         defer { conn.invalidate() }
-        let proxy = conn.synchronousRemoteObjectProxyWithErrorHandler { _ in } as? BoringNotchXPCHelperProtocol
-        proxy?.setFanPreset("auto") { _ in }
+        if let proxy = conn.synchronousRemoteObjectProxyWithErrorHandler({ _ in }) as? BoringNotchXPCHelperProtocol {
+            body(proxy)
+        }
     }
 }
 

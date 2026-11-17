@@ -113,10 +113,9 @@ final class SMC {
     }
 }
 
-/// Fan presets, run as root by the installed setuid copy of this helper: `boringnotch-fan fan <preset>`.
+/// Fan presets, run as root by the installed setuid copy of this helper (see RootTool).
 enum FanControl {
     static let presets = ["auto", "3500", "4500", "max"]
-    static let installedToolPath = "/usr/local/libexec/boringnotch-fan"
 
     static func apply(_ preset: String) -> Int32 {
         guard presets.contains(preset) else { return 2 }

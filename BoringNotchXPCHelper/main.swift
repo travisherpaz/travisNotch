@@ -28,10 +28,10 @@ class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
-// The setuid-root copy installed at FanControl.installedToolPath only ever applies a fan preset.
-if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "fan" {
+// The setuid-root copy installed at RootTool.path only ever runs RootTool's fixed commands.
+if CommandLine.arguments.count == 3, ["fan", "sleep"].contains(CommandLine.arguments[1]) {
     if geteuid() == 0 { _ = setuid(0) }
-    exit(FanControl.apply(CommandLine.arguments[2]))
+    exit(RootTool.run(Array(CommandLine.arguments.dropFirst())))
 }
 // Never run the XPC service with elevated privileges.
 if getuid() != geteuid() { exit(1) }

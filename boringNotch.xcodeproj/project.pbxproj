@@ -106,8 +106,9 @@
 		14E9FEAA2C70BF610062E83F /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEA92C70BF610062E83F /* DownloadView.swift */; };
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
-		4E07E5B22F1A000100A1B2C3 /* SystemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E07E5B12F1A000100A1B2C3 /* SystemView.swift */; };
 		4E07E5A22F1A000100A1B2C3 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E07E5A12F1A000100A1B2C3 /* NotesView.swift */; };
+		4E07E5C22F1A000100A1B2C3 /* AwakeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E07E5C12F1A000100A1B2C3 /* AwakeView.swift */; };
+		4E07E5B22F1A000100A1B2C3 /* SystemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E07E5B12F1A000100A1B2C3 /* SystemView.swift */; };
 		507266DB2C908E2E00A2D00D /* HoverButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507266DA2C908E2E00A2D00D /* HoverButton.swift */; };
 		5917FD112E57891600E87F1C /* MediaKeyInterceptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */; };
 		5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */; };
@@ -278,8 +279,9 @@
 		14E9FEA92C70BF610062E83F /* DownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadView.swift; sourceTree = "<group>"; };
 		14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Button+Bouncing.swift"; sourceTree = "<group>"; };
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
-		4E07E5B12F1A000100A1B2C3 /* SystemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemView.swift; sourceTree = "<group>"; };
 		4E07E5A12F1A000100A1B2C3 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
+		4E07E5C12F1A000100A1B2C3 /* AwakeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwakeView.swift; sourceTree = "<group>"; };
+		4E07E5B12F1A000100A1B2C3 /* SystemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemView.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
 		5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKeyInterceptor.swift; sourceTree = "<group>"; };
 		5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRelauncher.swift; sourceTree = "<group>"; };
@@ -644,20 +646,21 @@
 			path = models;
 			sourceTree = "<group>";
 		};
-		4E07E5B32F1A000100A1B2C3 /* System */ = {
-			isa = PBXGroup;
-			children = (
-				4E07E5B12F1A000100A1B2C3 /* SystemView.swift */,
-			);
-			path = System;
-			sourceTree = "<group>";
-		};
 		4E07E5A32F1A000100A1B2C3 /* Notes */ = {
 			isa = PBXGroup;
 			children = (
 				4E07E5A12F1A000100A1B2C3 /* NotesView.swift */,
 			);
 			path = Notes;
+			sourceTree = "<group>";
+		};
+		4E07E5B32F1A000100A1B2C3 /* System */ = {
+			isa = PBXGroup;
+			children = (
+				4E07E5C12F1A000100A1B2C3 /* AwakeView.swift */,
+				4E07E5B12F1A000100A1B2C3 /* SystemView.swift */,
+			);
+			path = System;
 			sourceTree = "<group>";
 		};
 		9A0887332C7AFF7E00C160EA /* Tabs */ = {
@@ -1029,6 +1032,7 @@
 				9A0887352C7AFF8E00C160EA /* TabSelectionView.swift in Sources */,
 				4E07E5A22F1A000100A1B2C3 /* NotesView.swift in Sources */,
 				4E07E5B22F1A000100A1B2C3 /* SystemView.swift in Sources */,
+				4E07E5C22F1A000100A1B2C3 /* AwakeView.swift in Sources */,
 				112FB7352CCF16F70015238C /* NotchSpaceManager.swift in Sources */,
 				14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */,
 				1153BD982D9881F900979FB0 /* AppleScriptHelper.swift in Sources */,

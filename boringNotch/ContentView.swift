@@ -353,6 +353,8 @@ struct ContentView: View {
                         NotesView()
                     case .system:
                         SystemView()
+                    case .awake:
+                        AwakeView()
                     }
                 }
                 .transition(
