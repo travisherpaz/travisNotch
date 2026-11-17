@@ -113,14 +113,14 @@ final class SMC {
     private static var cpuKeys: [String]?
 
     /// Hottest CPU sensor — the first number to move under load.
-    // ponytail: max over all "Tp*" keys; some read a flat 40.0 (placeholders), harmless for a max.
-    // Swap for a per-chip key list if a model reports bogus highs.
+    // ponytail: max over "Tp*" keys, skipping ones stuck at exactly 40.0 (placeholders on M4 Pro that
+    // would floor the reading at 40). Swap for a per-chip key list if a model reports bogus values.
     func cpuTemperature() -> Double? {
         if Self.cpuKeys == nil {
             let count = Int(read("#KEY") ?? 0)
             Self.cpuKeys = (0..<count).compactMap { key(at: $0) }.filter { $0.hasPrefix("Tp") }
         }
-        return Self.cpuKeys?.compactMap { read($0) }.filter { (10...130).contains($0) }.max()
+        return Self.cpuKeys?.compactMap { read($0) }.filter { (10...130).contains($0) && $0 != 40 }.max()
     }
 
     var fanCount: Int { Int(read("FNum") ?? 0) }
