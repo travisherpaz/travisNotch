@@ -66,6 +66,7 @@ struct ShelfView: View {
                     : Color.white.opacity(0.1),
                 style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [10])
             )
+            .background(RoundedRectangle(cornerRadius: 16).fill(.black)) // opaque over the glass notch
             .overlay {
                 content
                     .padding()

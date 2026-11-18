@@ -104,7 +104,7 @@ struct AwakeView: View {
                     .foregroundStyle(.gray)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(selected ? 0.22 : 0.08)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: selected ? 0.22 : 0.08)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(selected ? 0.5 : 0), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }

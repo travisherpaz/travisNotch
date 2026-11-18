@@ -35,7 +35,7 @@ struct NotesView: View {
                     Image(systemName: "plus")
                         .frame(maxHeight: .infinity)
                         .frame(width: 28)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.08)))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.gray)
@@ -49,7 +49,7 @@ struct NotesView: View {
         if index == 0 {
             TodoListView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.08)))
         } else {
             textNoteCard(index)
         }
@@ -86,7 +86,7 @@ struct NotesView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.08)))
     }
 }
 

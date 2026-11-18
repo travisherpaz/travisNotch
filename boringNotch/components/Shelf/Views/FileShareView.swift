@@ -43,7 +43,7 @@ struct FileShareView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
                 .fill(
-                    LinearGradient(colors: [Color.black.opacity(0.35), Color.black.opacity(0.20)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Color.black // was a black gradient (black on the old opaque notch); opaque over the glass notch
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)

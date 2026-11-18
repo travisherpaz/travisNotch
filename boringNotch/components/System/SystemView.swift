@@ -194,7 +194,7 @@ struct SystemView: View {
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.gray)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.04)))
     }
 
     private static func resetText(_ date: Date) -> String { ClaudeUsage.resetText(date, prefix: "in ") }
@@ -219,7 +219,7 @@ struct SystemView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.08)))
     }
 
     private func hero(_ value: String, sub: String? = nil, color: Color = .primary) -> some View {
