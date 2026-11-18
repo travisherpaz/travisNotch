@@ -332,6 +332,16 @@ final class ClaudeUsageMonitor: ObservableObject {
 
     func start() {
         guard task == nil else { return }
+        // Test hook: post this distributed notification from a shell to pop the session notice now.
+        DistributedNotificationCenter.default().addObserver(
+            forName: .init("theboringteam.boringnotch.testClaudeNotice"), object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                let monitor = ClaudeUsageMonitor.shared
+                if let session = monitor.usage?.session { monitor.showSession(session) }
+                else { monitor.show("Claude usage", monitor.error ?? "No data yet") }
+            }
+        }
         task = Task {
             while !Task.isCancelled {
                 await refresh()
@@ -353,8 +363,12 @@ final class ClaudeUsageMonitor: ObservableObject {
         if let weekly = usage.weekly, Self.crossed(weeklyStep, from: self.weeklyStep, min: 0) {
             show("Weekly \(Int(weekly.percent.rounded()))% used", weekly.resetsAt.map { "resets " + ClaudeUsage.resetText($0) } ?? "")
         } else if let session = usage.session, Self.crossed(sessionStep, from: self.sessionStep, min: 1) {
-            show("Claude \(Int(session.percent.rounded()))% used", session.resetsAt.map { ClaudeUsage.resetText($0) + " left" } ?? "")
+            showSession(session)
         }
+    }
+
+    private func showSession(_ session: ClaudeUsage.Window) {
+        show("Claude \(Int(session.percent.rounded()))% used", session.resetsAt.map { ClaudeUsage.resetText($0) + " left" } ?? "")
     }
 
     /// Session: one step per 10%. Weekly: -1 below 80%, then one step per 5%.
