@@ -691,6 +691,8 @@ struct GeneralDropTargetDelegate: DropDelegate {
 struct GlassNotchBackground: View {
     var notch: CGSize
     var edgeOpacity = 0.25
+    /// Share of the blur left at the edges: below 1 lets the sharp background through, a lighter blur.
+    var edgeBlur = 0.4
     var fullFadeDistance: CGFloat = 80
 
     var body: some View {
@@ -698,23 +700,26 @@ struct GlassNotchBackground: View {
             let size = geo.size
             let side = max(0, (size.width - notch.width) / 2), below = max(0, size.height - notch.height)
             let sideFraction = side / max(size.width, 1), notchFraction = min(1, notch.height / max(size.height, 1))
-            // Mask alpha at the outer edge: 0 = fully faded to `edgeOpacity`, 1 = still solid black.
+            // Mask alpha at the outer edge: 0 = fully faded, 1 = still solid.
             let sideEdge = 1 - min(1, side / fullFadeDistance), bottomEdge = 1 - min(1, below / fullFadeDistance)
+            // 1 at the hardware notch, falling to 0 at the faded edges.
+            let fade = Color.black
+                .mask(LinearGradient(stops: [
+                    .init(color: .black.opacity(sideEdge), location: 0),
+                    .init(color: .black, location: sideFraction),
+                    .init(color: .black, location: 1 - sideFraction),
+                    .init(color: .black.opacity(sideEdge), location: 1),
+                ], startPoint: .leading, endPoint: .trailing))
+                .mask(LinearGradient(stops: [
+                    .init(color: .black, location: notchFraction),
+                    .init(color: .black.opacity(bottomEdge), location: 1),
+                ], startPoint: .top, endPoint: .bottom))
+            // Layers multiply what shows through, so stacking a base alpha under `fade` gives base + (1 - base) * fade.
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
+                    .mask(ZStack { Color.black.opacity(edgeBlur); fade })
                 Color.black.opacity(edgeOpacity)
-                // Layers multiply what shows through, so this one is full black: mask 1 = solid, 0 = the edge tint.
-                Color.black
-                    .mask(LinearGradient(stops: [
-                        .init(color: .black.opacity(sideEdge), location: 0),
-                        .init(color: .black, location: sideFraction),
-                        .init(color: .black, location: 1 - sideFraction),
-                        .init(color: .black.opacity(sideEdge), location: 1),
-                    ], startPoint: .leading, endPoint: .trailing))
-                    .mask(LinearGradient(stops: [
-                        .init(color: .black, location: notchFraction),
-                        .init(color: .black.opacity(bottomEdge), location: 1),
-                    ], startPoint: .top, endPoint: .bottom))
+                fade
             }
             .environment(\.colorScheme, .dark)
         }
