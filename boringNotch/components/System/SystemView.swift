@@ -24,8 +24,7 @@ struct SystemView: View {
     @State private var preset = SystemView.fanPreset
     @State private var applying: String?
     @State private var error: String?
-    @State private var claude: ClaudeUsage?
-    @State private var claudeError: String?
+    @ObservedObject private var claudeMonitor = ClaudeUsageMonitor.shared
 
     private let presets = [("auto", "Auto"), ("3500", "3500"), ("4500", "4500"), ("max", "Max")]
 
@@ -48,18 +47,6 @@ struct SystemView: View {
             }
         }
         .padding(.top, 4)
-        .task {
-            while !Task.isCancelled {
-                let result = await XPCHelperClient.shared.claudeUsage()
-                if let json = result.json, let usage = ClaudeUsage(json: json) {
-                    claude = usage
-                    claudeError = nil
-                } else {
-                    claudeError = result.error ?? "Unexpected usage response"
-                }
-                try? await Task.sleep(for: .seconds(60))
-            }
-        }
         .task {
             while !Task.isCancelled {
                 stats = sampler.sample()
@@ -181,6 +168,7 @@ struct SystemView: View {
 
     /// Plan limits, as Claude Code's /usage: the 5-hour session is what runs out first, so it leads.
     private var claudeCard: some View {
+        let claude = claudeMonitor.usage, claudeError = claudeMonitor.error
         let worst = max(claude?.session?.percent ?? 0, claude?.weekly?.percent ?? 0)
         let status = claude.map { _ in Status(worst, warn: 80, critical: 95, labels: ("OK", "High", "Limit")) }
         return card("sparkle", "Claude", status: status) {
@@ -209,12 +197,7 @@ struct SystemView: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.04)))
     }
 
-    /// "in 2h 13m" within a day, else "Thu 09:00".
-    private static func resetText(_ date: Date) -> String {
-        let minutes = max(0, Int(date.timeIntervalSinceNow / 60))
-        guard minutes < 24 * 60 else { return date.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
-        return minutes < 60 ? "in \(minutes)m" : "in \(minutes / 60)h \(minutes % 60)m"
-    }
+    private static func resetText(_ date: Date) -> String { ClaudeUsage.resetText(date, prefix: "in ") }
 
     // MARK: - Building blocks
 
@@ -317,12 +300,78 @@ struct ClaudeUsage {
         if session == nil, weekly == nil { return nil }
     }
 
+    /// "2h 13m" within a day, else "Thu 09:00".
+    static func resetText(_ date: Date, prefix: String = "") -> String {
+        let minutes = max(0, Int(date.timeIntervalSinceNow / 60))
+        guard minutes < 24 * 60 else { return date.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
+        return prefix + (minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m")
+    }
+
     private static func date(_ text: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: text) { return date }
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: text)
+    }
+}
+
+/// Polls plan usage once a minute for the whole app run (the System tab shows it) and pops a closed-notch
+/// notice at milestones: every 10% of the 5-hour session, and every 5% of the week from 80%.
+@MainActor
+final class ClaudeUsageMonitor: ObservableObject {
+    static let shared = ClaudeUsageMonitor()
+    static let noticeSideWidth: CGFloat = 150
+
+    @Published private(set) var usage: ClaudeUsage?
+    @Published private(set) var error: String?
+    @Published private(set) var notice = (title: "", detail: "")
+    private var sessionStep: Int?
+    private var weeklyStep: Int?
+    private var task: Task<Void, Never>?
+
+    func start() {
+        guard task == nil else { return }
+        task = Task {
+            while !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+    }
+
+    private func refresh() async {
+        let result = await XPCHelperClient.shared.claudeUsage()
+        guard let json = result.json, let usage = ClaudeUsage(json: json) else {
+            error = result.error ?? "Unexpected usage response"
+            return
+        }
+        error = nil
+        self.usage = usage
+        let (sessionStep, weeklyStep) = Self.steps(usage)
+        defer { self.sessionStep = sessionStep; self.weeklyStep = weeklyStep }
+        if let weekly = usage.weekly, Self.crossed(weeklyStep, from: self.weeklyStep, min: 0) {
+            show("Weekly \(Int(weekly.percent.rounded()))% used", weekly.resetsAt.map { "resets " + ClaudeUsage.resetText($0) } ?? "")
+        } else if let session = usage.session, Self.crossed(sessionStep, from: self.sessionStep, min: 1) {
+            show("Claude \(Int(session.percent.rounded()))% used", session.resetsAt.map { ClaudeUsage.resetText($0) + " left" } ?? "")
+        }
+    }
+
+    /// Session: one step per 10%. Weekly: -1 below 80%, then one step per 5%.
+    nonisolated static func steps(_ usage: ClaudeUsage) -> (session: Int?, weekly: Int?) {
+        (usage.session.map { Int($0.percent / 10) },
+         usage.weekly.map { $0.percent >= 80 ? Int(($0.percent - 80) / 5) : -1 })
+    }
+
+    /// The first reading only sets the baseline (no notice on every launch); a drop is a window reset.
+    nonisolated static func crossed(_ step: Int?, from last: Int?, min: Int) -> Bool {
+        guard let step, let last else { return false }
+        return step > last && step >= min
+    }
+
+    private func show(_ title: String, _ detail: String) {
+        notice = (title, detail)
+        BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .claude)
     }
 }
 

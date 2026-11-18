@@ -21,6 +21,7 @@ struct ContentView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
+    @ObservedObject var claudeMonitor = ClaudeUsageMonitor.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @State private var hoverTask: Task<Void, Never>?
@@ -61,7 +62,9 @@ struct ContentView: View {
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
 
-        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+        if coordinator.expandingView.type == .claude && coordinator.expandingView.show && vm.notchState == .closed {
+            chinWidth = vm.closedNotchSize.width + 10 + 2 * ClaudeUsageMonitor.noticeSideWidth
+        } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
@@ -257,7 +260,24 @@ struct ContentView: View {
                     .padding(.top, 40)
                     Spacer()
                 } else {
-                    if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+                    if coordinator.expandingView.type == .claude && coordinator.expandingView.show
+                        && vm.notchState == .closed
+                    {
+                        // Usage milestone: what's used on the left of the notch, what's left on the right.
+                        HStack(spacing: 0) {
+                            Label(claudeMonitor.notice.title, systemImage: "sparkle")
+                                .frame(width: ClaudeUsageMonitor.noticeSideWidth, alignment: .leading)
+                            Rectangle()
+                                .fill(.black)
+                                .frame(width: vm.closedNotchSize.width + 10)
+                            Text(claudeMonitor.notice.detail)
+                                .frame(width: ClaudeUsageMonitor.noticeSideWidth, alignment: .trailing)
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                    } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
                         && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
                     {
                         HStack(spacing: 0) {
