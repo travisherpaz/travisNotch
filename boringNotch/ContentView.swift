@@ -103,7 +103,7 @@ struct ContentView: View {
                         : cornerRadiusInsets.closed.bottom
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
-                    .background(GlassNotchBackground(notch: CGSize(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)))
+                    .background(.black)
                     .clipShape(currentNotchShape)
                     .overlay(alignment: .top) {
                         Rectangle()
@@ -683,52 +683,4 @@ struct GeneralDropTargetDelegate: DropDelegate {
     return ContentView()
         .environmentObject(vm)
         .frame(width: vm.notchSize.width, height: vm.notchSize.height)
-}
-
-/// Solid black where the shape meets the hardware notch, fading to translucent glass toward the sides and
-/// bottom. Measured from the live shape size, so every tab, the closed notch and each expansion get their own
-/// ramp; growth of under `fullFadeDistance` fades proportionally less, so the small closed shape stays black.
-struct GlassNotchBackground: View {
-    var notch: CGSize
-    var edgeOpacity = 0.25
-    /// Share of the blur left at the edges: below 1 lets the sharp background through, a lighter blur.
-    var edgeBlur = 0.4
-    var fullFadeDistance: CGFloat = 80
-
-    var body: some View {
-        GeometryReader { geo in
-            let size = geo.size
-            let side = max(0, (size.width - notch.width) / 2), below = max(0, size.height - notch.height)
-            let sideFraction = side / max(size.width, 1), notchFraction = min(1, notch.height / max(size.height, 1))
-            // Mask alpha at the outer edge: 0 = fully faded, 1 = still solid.
-            let sideEdge = 1 - min(1, side / fullFadeDistance), bottomEdge = 1 - min(1, below / fullFadeDistance)
-            // 1 at the hardware notch, falling to 0 at the faded edges.
-            let notchFade = Color.black
-                .mask(LinearGradient(stops: [
-                    .init(color: .black.opacity(sideEdge), location: 0),
-                    .init(color: .black, location: sideFraction),
-                    .init(color: .black, location: 1 - sideFraction),
-                    .init(color: .black.opacity(sideEdge), location: 1),
-                ], startPoint: .leading, endPoint: .trailing))
-                .mask(LinearGradient(stops: [
-                    .init(color: .black, location: notchFraction),
-                    .init(color: .black.opacity(bottomEdge), location: 1),
-                ], startPoint: .top, endPoint: .bottom))
-            // The physical bezel above the screen is black too: keep a solid band along the top edge so the
-            // shape runs into the bezel with no seam, fading out over `fullFadeDistance`.
-            let band = min(1, fullFadeDistance / max(size.height, 1))
-            let bezelFade = LinearGradient(stops: [0, 0.25, 0.5, 0.75, 1].map { t in // smoothstep: no visible knee
-                .init(color: .black.opacity(1 - t * t * (3 - 2 * t)), location: band * t)
-            }, startPoint: .top, endPoint: .bottom)
-            let fade = ZStack { bezelFade; notchFade }
-            // Layers multiply what shows through, so stacking a base alpha under `fade` gives base + (1 - base) * fade.
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                    .mask(ZStack { Color.black.opacity(edgeBlur); fade })
-                Color.black.opacity(edgeOpacity)
-                fade
-            }
-            .environment(\.colorScheme, .dark)
-        }
-    }
 }
