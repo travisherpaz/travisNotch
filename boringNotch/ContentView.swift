@@ -690,7 +690,7 @@ struct GeneralDropTargetDelegate: DropDelegate {
 /// ramp; growth of under `fullFadeDistance` fades proportionally less, so the small closed shape stays black.
 struct GlassNotchBackground: View {
     var notch: CGSize
-    var edgeOpacity = 0.5
+    var edgeOpacity = 0.25
     var fullFadeDistance: CGFloat = 80
 
     var body: some View {
