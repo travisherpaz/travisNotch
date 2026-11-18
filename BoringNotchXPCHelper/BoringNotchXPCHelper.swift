@@ -227,6 +227,33 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         }
     }
 
+    /// The same numbers as Claude Code's `/usage`, fetched with Claude Code's own login.
+    /// The token is read through `/usr/bin/security`, which the keychain item already trusts (no prompt),
+    /// is only sent to api.anthropic.com, and is never stored or refreshed here (refreshing would rotate
+    /// Claude Code's token out from under it).
+    // ponytail: unofficial endpoint Claude Code uses; if Anthropic changes it the card shows the error.
+    @objc func claudeUsage(with reply: @escaping (Data?, String?) -> Void) {
+        DispatchQueue.global(qos: .utility).async {
+            let (status, output) = Self.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+            guard status == 0,
+                  let credentials = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
+                  let oauth = credentials["claudeAiOauth"] as? [String: Any],
+                  let token = oauth["accessToken"] as? String
+            else { reply(nil, "Sign in to Claude Code first"); return }
+            if let expiresAt = oauth["expiresAt"] as? Double, expiresAt / 1000 < Date().timeIntervalSince1970 {
+                reply(nil, "Login expired: run Claude Code once"); return
+            }
+            var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!, timeoutInterval: 15)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if let data, code == 200 { reply(data, nil) }
+                else { reply(nil, error?.localizedDescription ?? "Usage request failed (HTTP \(code))") }
+            }.resume()
+        }
+    }
+
     /// Fans and lid-closed sleep need root: install a setuid-root copy of this helper outside the app
     /// bundle (rebuilds would replace an in-bundle copy). Asks for the admin password on first use and
     /// again whenever the helper binary changes.

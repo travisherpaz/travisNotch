@@ -285,6 +285,20 @@ final class XPCHelperClient: NSObject {
         }
     }
 
+    /// Claude plan usage JSON, or an error message.
+    nonisolated func claudeUsage() async -> (json: Data?, error: String?) {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.claudeUsage { json, error in
+                    continuation.resume(returning: (json, error))
+                }
+            }
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
     /// For app termination: the async path hops to the main actor, which is busy terminating.
     nonisolated func resetFansToAutoSync() {
         syncProxy { $0.setFanPreset("auto") { _ in } }

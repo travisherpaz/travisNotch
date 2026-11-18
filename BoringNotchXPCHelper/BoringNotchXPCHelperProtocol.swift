@@ -25,6 +25,8 @@ import Foundation
     func setFanPreset(_ preset: String, with reply: @escaping (String?) -> Void)
     // Awake tab: keep the Mac awake with the lid closed (`pmset disablesleep`)
     func setSleepDisabled(_ disabled: Bool, with reply: @escaping (String?) -> Void)
+    // System tab: Claude plan usage JSON (as Claude Code's /usage), or an error message
+    func claudeUsage(with reply: @escaping (Data?, String?) -> Void)
 }
 
 /*

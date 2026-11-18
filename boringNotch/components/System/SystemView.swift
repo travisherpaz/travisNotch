@@ -24,6 +24,8 @@ struct SystemView: View {
     @State private var preset = SystemView.fanPreset
     @State private var applying: String?
     @State private var error: String?
+    @State private var claude: ClaudeUsage?
+    @State private var claudeError: String?
 
     private let presets = [("auto", "Auto"), ("3500", "3500"), ("4500", "4500"), ("max", "Max")]
 
@@ -39,8 +41,25 @@ struct SystemView: View {
                 batteryCard
                 networkCard
             }
+            GridRow {
+                claudeCard
+                comingSoonCard
+                comingSoonCard
+            }
         }
         .padding(.top, 4)
+        .task {
+            while !Task.isCancelled {
+                let result = await XPCHelperClient.shared.claudeUsage()
+                if let json = result.json, let usage = ClaudeUsage(json: json) {
+                    claude = usage
+                    claudeError = nil
+                } else {
+                    claudeError = result.error ?? "Unexpected usage response"
+                }
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
         .task {
             while !Task.isCancelled {
                 stats = sampler.sample()
@@ -160,6 +179,43 @@ struct SystemView: View {
         }
     }
 
+    /// Plan limits, as Claude Code's /usage: the 5-hour session is what runs out first, so it leads.
+    private var claudeCard: some View {
+        let worst = max(claude?.session?.percent ?? 0, claude?.weekly?.percent ?? 0)
+        let status = claude.map { _ in Status(worst, warn: 80, critical: 95, labels: ("OK", "High", "Limit")) }
+        return card("sparkle", "Claude", status: status) {
+            if let claude {
+                hero(claude.session.map { String(format: "%.0f%%", $0.percent) } ?? "--", sub: "5-hour")
+                Meter(fraction: (claude.session?.percent ?? 0) / 100, color: Status(claude.session?.percent ?? 0, warn: 80, critical: 95, labels: ("", "", "")).color)
+                detail("Resets", claude.session?.resetsAt.map(Self.resetText) ?? "--")
+                detail("Weekly", claude.weekly.map { String(format: "%.0f%%", $0.percent) } ?? "--")
+                Meter(fraction: (claude.weekly?.percent ?? 0) / 100, color: Status(claude.weekly?.percent ?? 0, warn: 80, critical: 95, labels: ("", "", "")).color)
+                detail("Resets", claude.weekly?.resetsAt.map(Self.resetText) ?? "--")
+            }
+            if let claudeError {
+                Text(claudeError)
+                    .font(.system(size: 9))
+                    .foregroundStyle(claude == nil ? .gray : .red)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var comingSoonCard: some View {
+        Text("Coming soon")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.gray)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.04)))
+    }
+
+    /// "in 2h 13m" within a day, else "Thu 09:00".
+    private static func resetText(_ date: Date) -> String {
+        let minutes = max(0, Int(date.timeIntervalSinceNow / 60))
+        guard minutes < 24 * 60 else { return date.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
+        return minutes < 60 ? "in \(minutes)m" : "in \(minutes / 60)h \(minutes % 60)m"
+    }
+
     // MARK: - Building blocks
 
     private func card<Content: View>(_ icon: String, _ title: String, status: Status?, @ViewBuilder content: () -> Content) -> some View {
@@ -241,6 +297,32 @@ struct SystemView: View {
             Self.fanPreset = id
         }
         applying = nil
+    }
+}
+
+/// `/api/oauth/usage`: `utilization` is a percentage, `resets_at` an ISO 8601 date; windows may be null.
+struct ClaudeUsage {
+    struct Window { let percent: Double; let resetsAt: Date? }
+    let session: Window?
+    let weekly: Window?
+
+    init?(json: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else { return nil }
+        func window(_ key: String) -> Window? {
+            guard let entry = root[key] as? [String: Any], let percent = (entry["utilization"] as? NSNumber)?.doubleValue else { return nil }
+            return Window(percent: percent, resetsAt: (entry["resets_at"] as? String).flatMap(Self.date))
+        }
+        session = window("five_hour")
+        weekly = window("seven_day")
+        if session == nil, weekly == nil { return nil }
+    }
+
+    private static func date(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: text) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: text)
     }
 }
 
