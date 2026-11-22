@@ -7,14 +7,16 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>SUEnableDownloaderService</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://TheBoredTeam.github.io/boring.notch/appcast.xml</string>
+	<string>https://github.com/travisherpaz/travisNotch/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>B1Y47t8C/v8ImurYA+9arEsuCrpxwJSviekiflMElbI=</string>
+	<string>VpK5X+hfatoefInjX7+RBXqax2ptbvMyzXNJk9j7YT0=</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict/>
