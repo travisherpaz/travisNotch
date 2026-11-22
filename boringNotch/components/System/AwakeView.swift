@@ -18,7 +18,12 @@ final class AwakeController: ObservableObject {
     @Published private(set) var mode: Mode = .normal
     @Published private(set) var busy = false
     @Published var error: String?
+    /// When the timer returns us to Normal; nil = until turned off.
+    @Published private(set) var endsAt: Date?
+    /// Minutes of the chosen preset; nil with `endsAt` set means an alarm time.
+    @Published private(set) var preset: Int?
     private var assertion: IOPMAssertionID = 0
+    private var timer: Task<Void, Never>?
 
     private init() {
         // A crash in lid-closed mode leaves `disablesleep` on; show it so "Normal" can undo it.
@@ -49,6 +54,25 @@ final class AwakeController: ObservableObject {
         }
         holdDisplay(newMode != .normal)
         mode = newMode
+        if newMode == .normal { await schedule(nil) }
+    }
+
+    /// Stay awake (Keep Screen On if currently Normal) until `date`, then go back to Normal. nil = until turned off.
+    func schedule(_ date: Date?, preset: Int? = nil) async {
+        if date != nil, mode == .normal {
+            await set(.display)
+            guard mode != .normal else { return }
+        }
+        timer?.cancel()
+        endsAt = date
+        self.preset = preset
+        guard let date else { return }
+        timer = Task { [weak self] in
+            // Continuous clock keeps counting while the Mac sleeps, so a late wake still ends the timer.
+            try? await Task.sleep(for: .seconds(max(0, date.timeIntervalSinceNow)), clock: .continuous)
+            guard !Task.isCancelled else { return }
+            await self?.set(.normal)
+        }
     }
 
     private func holdDisplay(_ on: Bool) {
@@ -68,17 +92,35 @@ final class AwakeController: ObservableObject {
 
 struct AwakeView: View {
     @ObservedObject private var controller = AwakeController.shared
+    @State private var alarm = Date.now.addingTimeInterval(3600)
+
+    private static let presets = [10, 30, 50, 60, 120]
 
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
                 option(.normal, icon: "moon.zzz", title: "Normal", subtitle: "Sleep as usual")
-                option(.display, icon: "display", title: "Keep Screen On", subtitle: "Until you turn it off")
+                option(.display, icon: "display", title: "Keep Screen On", subtitle: "Display stays on")
                 option(.lidClosed, icon: "laptopcomputer", title: "Lid Closed Too", subtitle: "Stays awake when closed")
             }
+            .frame(height: 44)
+            HStack(spacing: 6) {
+                chip("∞", selected: controller.mode != .normal && controller.endsAt == nil) {
+                    await controller.schedule(nil)
+                }
+                ForEach(Self.presets, id: \.self) { minutes in
+                    chip(minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h", selected: controller.preset == minutes) {
+                        await controller.schedule(.now.addingTimeInterval(Double(minutes) * 60), preset: minutes)
+                    }
+                }
+                alarmChip
+            }
+            .frame(height: 26)
             Group {
                 if let error = controller.error {
                     Text(error).foregroundStyle(.red)
+                } else if let endsAt = controller.endsAt {
+                    Text("Back to Normal at \(endsAt, style: .time) · \(endsAt, style: .timer) left").foregroundStyle(.gray)
                 } else if controller.mode == .lidClosed {
                     Text("Won't sleep even in a bag. Switch back to Normal when done.").foregroundStyle(.orange)
                 }
@@ -89,20 +131,71 @@ struct AwakeView: View {
         .padding(.top, 4)
     }
 
+    /// Wake-until time of day; the next occurrence of it (today or tomorrow).
+    private var alarmChip: some View {
+        let selected = controller.endsAt != nil && controller.preset == nil
+        return HStack(spacing: 4) {
+            Button {
+                Task { await scheduleAlarm() }
+            } label: {
+                Image(systemName: "alarm").font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            DatePicker("", selection: $alarm, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .font(.system(size: 11))
+                .onChange(of: alarm) { Task { await scheduleAlarm() } }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxHeight: .infinity)
+        .background(chipBackground(selected))
+        .disabled(controller.busy)
+    }
+
+    private func scheduleAlarm() async {
+        let time = Calendar.current.dateComponents([.hour, .minute], from: alarm)
+        guard let next = Calendar.current.nextDate(after: .now, matching: time, matchingPolicy: .nextTime) else { return }
+        await controller.schedule(next)
+    }
+
+    private func chip(_ title: String, selected: Bool, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(chipBackground(selected))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(controller.busy)
+    }
+
+    private func chipBackground(_ selected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(white: selected ? 0.22 : 0.08))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(selected ? 0.5 : 0), lineWidth: 1))
+    }
+
     private func option(_ mode: AwakeController.Mode, icon: String, title: String, subtitle: String) -> some View {
         let selected = controller.mode == mode
         return Button {
             Task { await controller.set(mode) }
         } label: {
-            VStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.gray)
+                    .font(.system(size: 16))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.gray)
+                }
             }
+            .lineLimit(1)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: selected ? 0.22 : 0.08)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(selected ? 0.5 : 0), lineWidth: 1))
