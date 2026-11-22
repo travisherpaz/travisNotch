@@ -59,7 +59,7 @@ struct BatteryView: View {
                 )
                 .padding(.leading, 2)
 
-            if iconStatus != "" && (isForNotification || Defaults[.showPowerStatusIcons]) {
+            if iconStatus != "" {
                 ZStack {
                     Image(iconStatus)
                         .resizable()
@@ -73,61 +73,6 @@ struct BatteryView: View {
                 .frame(width: batteryWidth, height: batteryWidth)
             }
         }
-    }
-}
-
-/// Battery with its level number inside: dark digits over the fill, light digits over the empty track.
-struct PercentBatteryIcon: View {
-    var level: Float
-    var isCharging: Bool
-    var isPluggedIn: Bool
-    var isInLowPowerMode: Bool
-    var showsNumber = true
-
-    private let size = CGSize(width: 34, height: 15)
-
-    private var fillColor: Color {
-        if isInLowPowerMode { return .yellow }
-        if level <= 20 && !isCharging && !isPluggedIn { return .red }
-        return .white
-    }
-
-    private var label: some View {
-        HStack(spacing: 0.5) {
-            if showsNumber {
-                Text("\(Int(level))")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .fixedSize()
-            }
-            if isCharging || isPluggedIn {
-                Image(systemName: isCharging ? "bolt.fill" : "powerplug.fill")
-                    .font(.system(size: 7, weight: .black))
-            }
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.7) // "100" plus a glyph still fits
-        .frame(width: size.width - 4, height: size.height)
-        .frame(width: size.width)
-    }
-
-    var body: some View {
-        let fillWidth = size.width * CGFloat(min(max(level, 0), 100)) / 100
-        HStack(spacing: 1) {
-            ZStack(alignment: .leading) {
-                Rectangle().fill(.white.opacity(0.3))
-                Rectangle().fill(fillColor).frame(width: fillWidth)
-                label.foregroundStyle(.white)
-                label.foregroundStyle(.black)
-                    .mask(alignment: .leading) { Rectangle().frame(width: fillWidth) }
-            }
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 4.5, style: .continuous))
-            RoundedRectangle(cornerRadius: 1)
-                .fill(.white.opacity(0.3))
-                .frame(width: 2, height: 5)
-        }
-        .fixedSize()
     }
 }
 
@@ -247,14 +192,6 @@ struct BoringBatteryView: View {
                 showPopupMenu.toggle()
             }
         }) {
-            if !isForNotification {
-                // Header: the percentage sits inside the icon (as the macOS menu bar does), so a crowded
-                // header can't squeeze it into two lines.
-                PercentBatteryIcon(
-                    level: levelBattery, isCharging: isCharging, isPluggedIn: isPluggedIn,
-                    isInLowPowerMode: isInLowPowerMode, showsNumber: Defaults[.showBatteryPercentage]
-                )
-            } else {
             HStack {
                 if Defaults[.showBatteryPercentage] {
                     Text("\(Int32(levelBattery))%")
@@ -269,7 +206,6 @@ struct BoringBatteryView: View {
                     batteryWidth: batteryWidth,
                     isForNotification: isForNotification
                 )
-            }
             }
         }
         .buttonStyle(ScaleButtonStyle())
@@ -326,6 +262,6 @@ struct BoringBatteryView: View {
         levelBattery: 80,
         maxCapacity: 100,
         timeToFullCharge: 10,
-        isForNotification: false
+        isForNotification: true
     ).frame(width: 200, height: 200)
 }
