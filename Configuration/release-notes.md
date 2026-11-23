@@ -4,9 +4,13 @@ A personal fork of [Boring Notch](https://github.com/TheBoredTeam/boring.notch).
 
 ## Install
 1. Unzip `travisNotch.zip` and move `travisNotch.app` to `/Applications`.
-2. The app is not notarized, so macOS blocks it on first launch. Allow it with either:
-   - System Settings → Privacy & Security → "Open Anyway"
-   - or in Terminal: `xattr -dr com.apple.quarantine /Applications/travisNotch.app`
+2. The app is not notarized, so macOS blocks it. **Before opening it**, run this once in Terminal:
+   ```
+   xattr -dr com.apple.quarantine /Applications/travisNotch.app
+   ```
+3. Open travisNotch.
+
+If you already saw "travisNotch Not Opened", click **Done** (not "Move to Trash"), then do step 2.
 
 ## Updates
 From v1.0.1 on, the app checks this repository for updates automatically (it never installs official Boring Notch updates).
