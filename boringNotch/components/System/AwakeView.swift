@@ -141,10 +141,8 @@ struct AwakeView: View {
                 Image(systemName: "alarm").font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            DatePicker("", selection: $alarm, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .datePickerStyle(.field)
-                .font(.system(size: 11))
+            TimeField(date: $alarm)
+                .fixedSize()
                 .onChange(of: alarm) { Task { await scheduleAlarm() } }
         }
         .padding(.horizontal, 8)
@@ -203,6 +201,38 @@ struct AwakeView: View {
         }
         .buttonStyle(.plain)
         .disabled(controller.busy)
+    }
+}
+
+/// SwiftUI's field DatePicker draws its own bezel box; this is the same control without it, sized to match the chips.
+private struct TimeField: NSViewRepresentable {
+    @Binding var date: Date
+
+    func makeNSView(context: Context) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textField
+        picker.datePickerElements = .hourMinute
+        picker.isBordered = false
+        picker.isBezeled = false
+        picker.drawsBackground = false
+        picker.font = .systemFont(ofSize: 11, weight: .medium)
+        picker.textColor = .white
+        picker.target = context.coordinator
+        picker.action = #selector(Coordinator.changed(_:))
+        return picker
+    }
+
+    func updateNSView(_ picker: NSDatePicker, context: Context) {
+        context.coordinator.date = $date
+        if picker.dateValue != date { picker.dateValue = date }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(date: $date) }
+
+    final class Coordinator: NSObject {
+        var date: Binding<Date>
+        init(date: Binding<Date>) { self.date = date }
+        @objc func changed(_ sender: NSDatePicker) { date.wrappedValue = sender.dateValue }
     }
 }
 
